@@ -71,10 +71,11 @@ class QlikApp{
         if ($this.ReloadOn -eq [ReloadOn]::Update)
         {
           Write-Verbose "Reloading app since ReloadOn is set to $($this.ReloadOn)"
-          if (($this.Stream -ne ".") -And ($this.Stream -ne $item.stream.name))
-          {
-            Publish-QlikApp -id $replace.id -stream $item.stream.id
-          }
+        #  if (($this.Stream -ne ".") -And ($this.Stream -ne $item.stream.name))
+        #  {
+        #    Publish-QlikApp -id $replace.id -stream $item.stream.id
+        #  }
+          $this.configure($replace)
           Invoke-QlikPost /qrs/app/$($replace.id)/reload
           $task = Get-QlikReloadTask -filter "app.id eq $($replace.id)"
           Start-QlikTask -wait $task.id
@@ -83,30 +84,31 @@ class QlikApp{
         Switch-QlikApp -id $replace.id -appId $item.id
         Remove-QlikApp -id $replace.id
       }
-      $props = @()
-      foreach ($prop in $this.CustomProperties.Keys)
-      {
-        $cp = Get-QlikCustomProperty -filter "name eq '$prop'" -raw
-        if (-Not ($cp.choiceValues -contains $this.CustomProperties.$prop))
-        {
-          $cp.choiceValues += $this.CustomProperties.$prop
-          Write-Verbose -Message "Updating property $prop with new value of $($this.CustomProperties.$prop)"
-          Update-QlikCustomProperty -id $cp.id -choiceValues $cp.choiceValues
-        }
-        $props += "$($prop)=$($this.CustomProperties.$prop)"
-      }
-      $appTags = @()
-      foreach ($tag in $this.Tags)
-      {
-        $tagId = (Get-QlikTag -filter "name eq '$tag'").id
-        if (-Not $tagId)
-        {
-          $tagId = (New-QlikTag -name $tag).id
-          Write-Verbose "Created tag for $tag with id $tagId"
-        }
-        $appTags += $tag
-      }
-      Update-QlikApp -id $item.id -tags $appTags -customProperties $props
+    #  $props = @()
+    #  foreach ($prop in $this.CustomProperties.Keys)
+    #  {
+    #    $cp = Get-QlikCustomProperty -filter "name eq '$prop'" -raw
+    #    if (-Not ($cp.choiceValues -contains $this.CustomProperties.$prop))
+    #    {
+    #      $cp.choiceValues += $this.CustomProperties.$prop
+    #      Write-Verbose -Message "Updating property $prop with new value of $($this.CustomProperties.$prop)"
+    #      Update-QlikCustomProperty -id $cp.id -choiceValues $cp.choiceValues
+    #    }
+    #    $props += "$($prop)=$($this.CustomProperties.$prop)"
+    #  }
+    #  $appTags = @()
+    #  foreach ($tag in $this.Tags)
+    #  {
+    #    $tagId = (Get-QlikTag -filter "name eq '$tag'").id
+    #    if (-Not $tagId)
+    #    {
+    #      $tagId = (New-QlikTag -name $tag).id
+    #      Write-Verbose "Created tag for $tag with id $tagId"
+    #    }
+    #    $appTags += $tag
+    #  }
+    #  Update-QlikApp -id $item.id -tags $appTags -customProperties $props
+      $this.configure($item)
       if (($this.Stream -ne ".") -And ($this.Stream -ne $item.stream.name))
       {
         $streamId = (Get-QlikStream -filter "name eq '$($this.Stream)'" -raw).id
@@ -178,6 +180,34 @@ class QlikApp{
     }
 
     return $this
+  }
+
+  [void] configure($item)
+  {
+      $props = @()
+      foreach ($prop in $this.CustomProperties.Keys)
+      {
+        $cp = Get-QlikCustomProperty -filter "name eq '$prop'" -raw
+        if (-Not ($cp.choiceValues -contains $this.CustomProperties.$prop))
+        {
+          $cp.choiceValues += $this.CustomProperties.$prop
+          Write-Verbose -Message "Updating property $prop with new value of $($this.CustomProperties.$prop)"
+          Update-QlikCustomProperty -id $cp.id -choiceValues $cp.choiceValues
+        }
+        $props += "$($prop)=$($this.CustomProperties.$prop)"
+      }
+      $appTags = @()
+      foreach ($tag in $this.Tags)
+      {
+        $tagId = (Get-QlikTag -filter "name eq '$tag'").id
+        if (-Not $tagId)
+        {
+          $tagId = (New-QlikTag -name $tag).id
+          Write-Verbose "Created tag for $tag with id $tagId"
+        }
+        $appTags += $tag
+      }
+      Update-QlikApp -id $item.id -tags $appTags -customProperties $props
   }
 
   [bool] hasProperties($item)
