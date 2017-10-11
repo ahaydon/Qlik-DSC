@@ -20,7 +20,7 @@ class QlikApp{
   [DscProperty(Key)]
   [string]$Name
 
-  [DscProperty()]
+  [DscProperty(Mandatory)]
   [string]$Source
 
   [DscProperty()]
@@ -252,6 +252,95 @@ class QlikApp{
 }
 
 [DscResource()]
+class QlikExtension{
+
+  [DscProperty(Key)]
+  [string]$Name
+
+  [DscProperty(Mandatory)]
+  [string]$Source
+
+  [DscProperty()]
+  [hashtable]$CustomProperties
+
+  [DscProperty()]
+  [string[]]$Tags
+
+  [DscProperty(Mandatory)]
+  [Ensure]$Ensure
+
+  [void] Set()
+  {
+    $item = Get-QlikExtension -raw -full -filter "name eq '$($this.name)'"
+    $present = $item -ne $null
+
+    if($this.ensure -eq [Ensure]::Present)
+    {
+      if (-Not $present)
+      {
+        Write-Verbose "Extension not found but should be present"
+        Write-Verbose -Message "Importing extension from $($this.Source)"
+        Import-QlikExtension -ExtensionPath "$($this.Source)"
+      }
+    }
+    else
+    {
+      if($present)
+      {
+        Write-Verbose -Message "Deleting extension $($item.name)"
+        Remove-QlikExtension -id $item.id
+      }
+    }
+  }
+
+  [bool] Test()
+  {
+    $item = Get-QlikExtension -raw -full -filter "name eq '$($this.name)'"
+    $present = $item -ne $null
+
+    if($this.Ensure -eq [Ensure]::Present)
+    {
+      if($present) {
+        Write-Verbose "App is already present"
+        return $true
+      } else {
+        Write-Verbose "App should be present but was not found"
+        return $false
+      }
+    }
+    else
+    {
+      if($present) {
+        Write-Verbose "App exists but should be absent"
+        return $false
+      }
+      else
+      {
+        Write-Verbose "App should be absent and was not found"
+        return $true
+      }
+    }
+  }
+
+  [QlikExtension] Get()
+  {
+    $item = Get-QlikExtension -raw -full -filter "name eq '$($this.name)'"
+    $present = $item -ne $null
+
+    if ($present)
+    {
+      $this.Ensure = [Ensure]::Present
+    }
+    else
+    {
+      $this.Ensure = [Ensure]::Absent
+    }
+
+    return $this
+  }
+}
+
+[DscResource()]
 class QlikConnect{
 
   [DscProperty(Key)]
@@ -455,6 +544,9 @@ class QlikDataConnection{
   [DscProperty(Mandatory)]
   [string]$ConnectionString
 
+  [DscProperty()]
+  [string]$Tags
+
   [DscProperty(Mandatory)]
   [string]$Type
 
@@ -464,15 +556,12 @@ class QlikDataConnection{
     $present = $item -ne $null
     if($this.ensure -eq [Ensure]::Present)
     {
-      if($present)
+      if(!$present)
       {
-        if(-not $this.hasProperties($item))
-        {
-          Update-QlikDataConnection -id $item.id -ConnectionString $this.ConnectionString
-        }
-      } else {
-        New-QlikDataConnection -Name $this.Name -ConnectionString $this.ConnectionString -Type $this.Type
+          $item = New-QlikDataConnection -Name $this.Name -ConnectionString $this.ConnectionString -Type $this.Type
       }
+      $prop = ConfigurePropertiesAndTags($this)
+      Update-QlikDataConnection -id $item.id -ConnectionString $this.ConnectionString -Tags $prop.tags
     }
     else
     {
@@ -535,6 +624,18 @@ class QlikDataConnection{
       return $false
     }
 
+    if ($this.Tags)
+    {
+      foreach ($tag in $this.Tags)
+      {
+        if (-Not ($item.tags.name -contains $tag))
+        {
+          Write-Verbose "Not tagged with $tag"
+          return $false
+        }
+      }
+    }
+
     return $true
   }
 }
@@ -562,12 +663,20 @@ class QlikLicense{
 
   [void] Set()
   {
-    $present = $(Get-QlikLicense) -ne "null"
+      $license = $(Get-QlikLicense)
+      if ($license) {
+          $present = ($license.serial -eq $this.Serial)
+      } else {
+          $present = $false
+      }
     Write-Debug $present
     if($this.ensure -eq [Ensure]::Present)
     {
       if(-not $present)
       {
+          if ($license -ne 'null') {
+              Invoke-QlikDelete "/qrs/license/$($license.id)"
+          }
         Set-QlikLicense -Serial $this.Serial -Control $this.Control -Name $this.Name -Organization $this.Organization -Lef $this.Lef
       }
     }
@@ -576,14 +685,19 @@ class QlikLicense{
       if($present)
       {
         Write-Verbose -Message "Deleting license $($this.Serial)"
-        #Remove-QlikLicense
+        Invoke-QlikDelete "/qrs/license/$($license.id)"
       }
     }
   }
 
   [bool] Test()
   {
-    $present = $(Get-QlikLicense) -ne "null"
+    $license = $(Get-QlikLicense)
+    if ($license) {
+        $present = ($license.serial -eq $this.Serial)
+    } else {
+        $present = $false
+    }
     Write-Debug $present
     if($this.Ensure -eq [Ensure]::Present)
     {
@@ -928,12 +1042,20 @@ class QlikScheduler{
   [DscProperty()]
   [string]$SchedulerServiceType
 
+  [DscProperty()]
+  [Int]$MaxConcurrentEngines
+
+  [DscProperty()]
+  [Int]$EngineTimeout
+
   [void] Set()
   {
     $item = Get-QlikScheduler -raw -full -filter "serverNodeConfiguration.name eq '$($this.Node)'"
 
     $params = @{ "id" = $item.id }
     if($this.SchedulerServiceType) { $params.Add("SchedulerServiceType", $this.SchedulerServiceType) }
+    if($this.MaxConcurrentEngines) { $params.Add("maxConcurrentEngines", $this.MaxConcurrentEngines) }
+    if($this.EngineTimeout) { $params.Add("engineTimeout", $this.EngineTimeout) }
 
     Update-QlikScheduler @params
   }
@@ -975,6 +1097,14 @@ class QlikScheduler{
       }
       if($item.settings.SchedulerServiceType -ne $sched_type) {
         Write-Verbose "Test-HasProperties: SchedulerServiceType property value - $($item.settings.SchedulerServiceType) does not match desired state - $($sched_type)"
+        return $false
+      }
+      if($item.settings.maxConcurrentEngines -ne $sched_type) {
+        Write-Verbose "Test-HasProperties: MaxConcurrentEngines property value - $($item.settings.maxConcurrentEngines) does not match desired state - $($this.MaxConcurrentEngines)"
+        return $false
+      }
+      if($item.settings.EngineTimeout -ne $sched_type) {
+        Write-Verbose "Test-HasProperties: EngineTimeout property value - $($item.settings.EngineTimeout) does not match desired state - $($this.EngineTimeout)"
         return $false
       }
     }
@@ -1040,18 +1170,19 @@ class QlikTask{
       }
       else
       {
-        $appTags = @()
-        foreach ($tag in $this.Tags)
-        {
-          $tagId = (Get-QlikTag -filter "name eq '$tag'").id
-          if (-Not $tagId)
-          {
-            $tagId = (New-QlikTag -name $tag).id
-            Write-Verbose "Created tag for $tag with id $tagId"
-          }
-          $appTags += $tag
-        }
-        Update-QlikReloadTask -id $item.id -tags $appTags
+        #$appTags = @()
+        #foreach ($tag in $this.Tags)
+        #{
+        #  $tagId = (Get-QlikTag -filter "name eq '$tag'").id
+        #  if (-Not $tagId)
+        #  {
+        #    $tagId = (New-QlikTag -name $tag).id
+        #    Write-Verbose "Created tag for $tag with id $tagId"
+        #  }
+        #  $appTags += $tag
+        #}
+        $prop = ConfigurePropertiesAndTags($this)
+        Update-QlikReloadTask -id $item.id -tags $prop.Tags
         if ($this.StartOn -eq [ReloadOn]::Update)
         {
           Write-Verbose "Starting task since StartOn is set to $($this.StartOn)"
@@ -1151,6 +1282,18 @@ class QlikTask{
     {
       Write-Verbose "Trigger for OnSuccess event of task $($this.OnSuccess) does not exist"
       $result = $false
+    }
+
+    if ($this.Tags)
+    {
+      foreach ($tag in $this.Tags)
+      {
+        if (-Not ($item.tags.name -contains $tag))
+        {
+          Write-Verbose "Not tagged with $tag"
+          return $false
+        }
+      }
     }
 
     return $result
@@ -1335,7 +1478,10 @@ class QlikEngine {
     [string]$Node
 
     [DscProperty()]
-    [string]$documentDirectory
+    [string]$DocumentDirectory
+
+    [DscProperty()]
+    [Int]$DocumentTimeout
 
     [DscProperty()]
     [ValidateRange(0,100)]
@@ -1354,26 +1500,24 @@ class QlikEngine {
     [Int]$CpuThrottle
 
     [DscProperty()]
-    [Bool]$AllowDataLineage=$true
+    [Bool]$AllowDataLineage
 
     [DscProperty()]
-    [Bool]$StandardReload=$true
-
-    [DscProperty(Mandatory)]
-    [Ensure]$Ensure
+    [Bool]$StandardReload
 
     [Void] Set () {
         Write-Verbose "Get Qlik Engine: $($this.Node)"
         $item = Get-QlikEngine -Full -Filter "serverNodeConfiguration.hostName eq '$($this.Node)'"
         if($item.id) {
             $engparams = @{ "id" = $item.id }
-            if($this.documentDirectory) { $engparams.Add("documentDirectory", $this.documentDirectory) }
+            if($this.DocumentDirectory) { $engparams.Add("documentDirectory", $this.DocumentDirectory) }
+            if($this.DocumentTimeout) { $engparams.Add("documentTimeout", $this.DocumentTimeout) }
             if($this.MinMemUsage) { $engparams.Add("workingSetSizeLoPct", $this.MinMemUsage) }
             if($this.MaxMemUsage) { $engparams.Add("workingSetSizeHiPct", $this.MaxMemUsage) }
             if($this.MemUsageMode) { $engparams.Add("workingSetSizeMode", $this.MemUsageMode) }
             if($this.CpuThrottle) { $engparams.Add("cpuThrottlePercentage", $this.CpuThrottle) }
-            $engparams.Add("allowDataLineage", $this.AllowDataLineage)
-            $engparams.Add("standardReload", $this.StandardReload)
+            if($this.AllowDataLineage) { $engparams.Add("allowDataLineage", $this.AllowDataLineage) }
+            if($this.StandardReload) { $engparams.Add("standardReload", $this.StandardReload) }
             Write-Verbose "Update Qlik Engine: $($this.Node)"
             Update-QlikEngine @engparams
         } else {
@@ -1402,7 +1546,8 @@ class QlikEngine {
         Write-Verbose "Get Qlik Engine: $($this.Node)"
         $item = Get-QlikEngine -Full -Filter "serverNodeConfiguration.hostName eq '$($this.Node)'"
         if($item -ne $null) {
-          $this.documentDirectory = $item.settings.documentDirectory
+          $this.DocumentDirectory = $item.settings.documentDirectory
+          $this.DocumentTimeout = $item.settings.documentTimeout
           $this.AllowDataLineage = $item.settings.allowDataLineage
           $this.CpuThrottle = $item.settings.cpuThrottlePercentage
           $this.MaxMemUsage = $item.settings.workingSetSizeHiPct
@@ -1437,6 +1582,12 @@ class QlikEngine {
         if($this.documentDirectory) {
             if($item.settings.documentDirectory -ne $this.documentDirectory) {
                 Write-Verbose "Test-HasProperties: documentDirectory property value - $($item.settings.documentDirectory) does not match desired state - $($this.documentDirectory)"
+                $desiredState = $false
+            }
+        }
+        if($this.DocumentTimeout) {
+            if($item.settings.documentTimeout -ne $this.DocumentTimeout) {
+                Write-Verbose "Test-HasProperties: documentTimeout property value - $($item.settings.documentTimeout) does not match desired state - $($this.DocumentTimeout)"
                 $desiredState = $false
             }
         }
@@ -1604,6 +1755,12 @@ class QlikStream{
   [DscProperty(Key)]
   [string]$Name
 
+  [DscProperty()]
+  [hashtable]$CustomProperties
+
+  [DscProperty()]
+  [string[]]$Tags
+
   [DscProperty(Mandatory)]
   [Ensure] $Ensure
 
@@ -1619,6 +1776,8 @@ class QlikStream{
         $item = New-QlikStream -Name $this.Name
         Write-Verbose "Created stream with ID $($item.ID)"
       }
+      $prop = ConfigurePropertiesAndTags($this)
+      Update-QlikStream -id $item.id -customProperties $prop.Properties -tags $prop.Tags
     }
     else
     {
@@ -1689,6 +1848,368 @@ class QlikStream{
     #{
     #  return $false
     #}
+    if ($this.Tags)
+    {
+      foreach ($tag in $this.Tags)
+      {
+        if (-Not ($item.tags.name -contains $tag))
+        {
+          Write-Verbose "Not tagged with $tag"
+          return $false
+        }
+      }
+    }
+
+    if ($this.CustomProperties)
+    {
+      foreach ($prop in $this.CustomProperties.Keys)
+      {
+        $cp = $item.customProperties | where {$_.definition.name -eq $prop}
+        if (-Not (($cp) -And ($cp.value -eq $this.CustomProperties.$prop)))
+        {
+          Write-Verbose "Property $prop should have value $($this.CustomProperties.$prop) but instead has value $($cp.value)"
+          return $false
+        }
+      }
+    }
+
+    return $true
+  }
+}
+
+[DscResource()]
+class QlikPackage {
+
+    [DscProperty(Key)]
+    [String]$Name
+
+    [DscProperty(Key)]
+    [AllowEmptyString()]
+    [string]$ProductId
+
+    [DscProperty(Mandatory)]
+    [string]$Setup
+
+    [DscProperty(Mandatory)]
+    [Ensure]$Ensure
+
+    [DscProperty()]
+    [string]$LogFile
+
+    [DscProperty()]
+    [String]$Rimnodetype
+
+    [DscProperty()]
+    [Bool]$Rimnode=$false
+
+    [DscProperty()]
+    [Bool]$DesktopShortcut=$false
+
+    [DscProperty()]
+    [Bool]$SkipStartServices=$false
+
+    [DscProperty()]
+    [Bool]$SkipValidation=$false
+
+    [DscProperty()]
+    [string]$InstallDir
+
+    [DscProperty()]
+    [string]$QlikDataPath
+
+    [DscProperty(Mandatory)]
+    [PSCredential]$ServiceCredential
+
+    [DscProperty(Mandatory)]
+    [PSCredential]$DbSuperUserPassword
+
+    [DscProperty()]
+    [String]$Hostname
+
+    [DscProperty()]
+    [PSCredential]$DbCredential
+
+    [DscProperty()]
+    [string]$DbHost = "localhost"
+
+    [DscProperty()]
+    [int]$DbPort = 4432
+
+    [DscProperty(Mandatory)]
+    [string]$RootDir
+
+    [DscProperty()]
+    [string]$StaticContentRootDir
+
+    [DscProperty()]
+    [string]$CustomDataRootDir
+
+    [DscProperty()]
+    [string]$ArchivedLogsDir
+
+    [DscProperty()]
+    [string]$AppsDir
+
+    [DscProperty()]
+    [bool]$CreateCluster
+
+    [DscProperty()]
+    [bool]$InstallLocalDb
+
+    [DscProperty()]
+    [bool]$ConfigureDbListener
+
+    [DscProperty()]
+    [string]$ListenAddresses = "*"
+
+    [DscProperty()]
+    [string]$IpRange = "0.0.0.0/0"
+
+    [DscProperty()]
+    [Int]$ExitCode=0
+
+    [void] Set() {
+        if($this.Ensure -eq [Ensure]::Present) {
+            Write-Verbose "Install $($this.Name) with ProductId '$($this.ProductId)'"
+            [String]$parsedSetupParams = "-silent"
+            if($this.LogFile) { [String]$parsedSetupParams += " -log `"$($this.LogFile)`"" }
+            if($this.SkipStartServices) { [String]$parsedSetupParams += " skipstartservices=1" }
+            if($this.InstallDir) { [String]$parsedSetupParams += " installdir=`"$($this.InstallDir)`"" }
+            if($this.DesktopShortcut) { [String]$parsedSetupParams += " desktopshortcut=1" }
+            if(Get-ItemProperty HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object { $_.DisplayName -like 'Qlik Sense*' }) {
+                if($this.ServiceCredential) {
+                    [String]$parsedSetupParams += " userpassword=`"$([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($this.ServiceCredential.Password)))`""
+                }
+                [String]$parsedSetupParams += " dbpassword=`"$([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($this.DbSuperUserPassword.Password)))`""
+            } else {
+                if($this.Rimnodetype) {
+                    [String]$parsedSetupParams += " rimnodetype=$($this.Rimnodetype)"
+                    foreach($item in $this.Features) {
+                        [String]$parsedSetupParams += " `"$item`""
+                    }
+                }
+                if($this.Rimnode) { [String]$parsedSetupParams += " rimnode=1" }
+                [String]$parsedSetupParams += " dbpassword=`"$([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($this.DbSuperUserPassword.Password)))`""
+                if($this.Hostname) { [String]$parsedSetupParams += " hostname=`"$($this.Hostname)`"" }
+                if($this.ServiceCredential) { [String]$parsedSetupParams += " userwithdomain=`"$($this.ServiceCredential.Username)`" userpassword=`"$([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($this.ServiceCredential.Password)))`"" }
+
+                if($this.RootDir) {
+                  if(!$this.StaticContentRootDir) { $this.StaticContentRootDir = "$($this.RootDir)\StaticContent" }
+                  if(!$this.CustomDataRootDir) { $this.CustomDataRootDir = "$($this.RootDir)\CustomData" }
+                  if(!$this.ArchivedLogsDir) { $this.ArchivedLogsDir = "$($this.RootDir)\ArchivedLogs" }
+                  if(!$this.AppsDir) { $this.AppsDir = "$($this.RootDir)\Apps" }
+                }
+                $spc = @"
+<?xml version="1.0"?>
+<SharedPersistenceConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <DbUserName>$($this.DbCredential.Username)</DbUserName>
+  <DbUserPassword>$([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($this.DbCredential.Password)))</DbUserPassword>
+  <DbHost>$($this.DbHost)</DbHost>
+  <DbPort>$($this.DbPort)</DbPort>
+  <RootDir>$($this.RootDir)</RootDir>
+  <StaticContentRootDir>$($this.StaticContentRootDir)</StaticContentRootDir>
+  <CustomDataRootDir>$($this.CustomDataRootDir)</CustomDataRootDir>
+  <ArchivedLogsDir>$($this.ArchivedLogsDir)</ArchivedLogsDir>
+  <AppsDir>$($this.AppsDir)</AppsDir>
+  <CreateCluster>$("$($this.CreateCluster)".ToLower())</CreateCluster>
+  <InstallLocalDb>$("$($this.InstallLocalDb)".ToLower())</InstallLocalDb>
+  <ConfigureDbListener>$("$($this.ConfigureDbListener)".ToLower())</ConfigureDbListener>
+  <ListenAddresses>$($this.ListenAddresses)</ListenAddresses>
+  <IpRange>$($this.IpRange)</IpRange>
+</SharedPersistenceConfiguration>
+"@
+                $spc | Out-File -FilePath "$env:temp\spc.cfg"
+                [String]$parsedSetupParams += " spc=`"$env:temp\spc.cfg`""
+            }
+            Write-Verbose "Starting `"$($this.Setup)`" $parsedSetupParams"
+            $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+            $startInfo.UseShellExecute = $false #Necessary for I/O redirection and just generally a good idea
+            $process = New-Object System.Diagnostics.Process
+            $process.StartInfo = $startInfo
+            $startInfo.FileName = $this.Setup
+            $startInfo.Arguments = $parsedSetupParams
+            $process.Start() | Out-Null
+            $process.WaitForExit()
+            Write-Verbose "$($this.Name) installation finished with Exitcode: $($process.ExitCode)"
+        } else {
+            Write-Verbose "Uninstall $($this.Name)  with ProductId '$($this.ProductId)'"
+            [String]$parsedSetupParams = "-silent -uninstall"
+            if($this.LogFile) { [String]$parsedSetupParams += " -log `"$($this.LogFile)`"" }
+            Write-Verbose "Starting `"$($this.Setup)`" $parsedSetupParams"
+            $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+            $startInfo.UseShellExecute = $false #Necessary for I/O redirection and just generally a good idea
+            $process = New-Object System.Diagnostics.Process
+            $process.StartInfo = $startInfo
+            $startInfo.FileName = $this.Setup
+            $startInfo.Arguments = $parsedSetupParams
+            $process.Start() | Out-Null
+            $process.WaitForExit()
+            Write-Verbose "$($this.Name) uninstallation finished with Exitcode: $($process.ExitCode)"
+        }
+    }
+
+    [bool] Test() {
+        if($env:USERNAME -eq "$env:COMPUTERNAME$") { Write-Error "$($this.Name) can not be installed by 'LOCAL SYSTEM', please use PsDscRunAsCredential property" }
+        $regItem = (Get-ItemProperty HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object { $_.DisplayName -eq $this.Name })
+        if($this.Ensure -eq [Ensure]::Present) {
+            if($regItem) {
+                if($this.ProductId.Trim("{}") -eq $regItem.BundleProviderKey.Trim("{}")) {
+                    Write-Verbose "$($this.Name) installation with ProductId '$($this.ProductId)' is 'Present', in desired state."
+                    return $true
+                } else {
+                    Write-Verbose "$($this.Name) installation with ProductId '$($this.ProductId)' is 'Absent', not in desired state."
+                    return $false
+                }
+            } else {
+                Write-Verbose "$($this.Name) installation with ProductId '$($this.ProductId)' is 'Absent', not in desired state."
+                return $false
+            }
+        } else {
+            if($regItem) {
+                if($this.ProductId.Trim("{}") -eq $regItem.BundleProviderKey.Trim("{}")) {
+                    Write-Verbose "$($this.Name) installation with ProductId '$($this.ProductId)' is 'Present', not in desired state."
+                    return $false
+                } else {
+                    Write-Verbose "$($this.Name) installation with ProductId '$($this.ProductId)' is 'Absent', in desired state."
+                    return $true
+                }
+            } else {
+                Write-Verbose "$($this.Name) installation with ProductId '$($this.ProductId)' is 'Absent', in desired state."
+                return $true
+            }
+        }
+    }
+
+    [QlikPackage] Get() {
+        $regItem = (Get-ItemProperty HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object { $_.DisplayName -eq "Qlik Sense" })
+        if($regItem) {
+            #$this.ProductId = $regItem.BundleProviderKey.Trim("{}")
+            $this.Ensure = [Ensure]::Present
+        } else {
+            #$this.ProductId = $null
+            $this.Ensure = [Ensure]::Absent
+        }
+        return @{}
+    }
+
+}
+
+[DscResource()]
+class QlikUser{
+
+  [DscProperty(Key)]
+  [string]$UserID
+
+  [DscProperty(Key)]
+  [string]$UserDirectory
+
+  [DscProperty()]
+  [string]$Name
+
+  [DscProperty()]
+  [string[]]$Roles
+
+  [DscProperty(Mandatory)]
+  [Ensure]$Ensure
+
+  [void] Set()
+  {
+    $item = Get-QlikUser -raw -full -filter "userId eq '$($this.userID)' and userDirectory eq '$($this.userDirectory)'"
+    $present = $item -ne $null
+    if($this.ensure -eq [Ensure]::Present)
+    {
+      $params = @{
+        userID = $this.userID
+        userDirectory = $this.userDirectory
+      }
+      if($this.Name) { $params.Add("Name", $this.Name) }
+      if($this.Roles) { $params.Add("Roles", $this.Roles) }
+
+      if($present)
+      {
+        if(-not $this.hasProperties($item))
+        {
+          $params.Remove("UserID")
+          $params.Remove("UserDirectory")
+          Update-QlikUser -id $item.id @params
+        }
+      } else {
+        New-QlikUser @params
+      }
+    }
+    else
+    {
+      if($present)
+      {
+        Write-Verbose -Message "Deleting the property $($this.name)"
+        Remove-QlikUser -id $item.id
+      }
+    }
+  }
+
+  [bool] Test()
+  {
+    $item = Get-QlikUser -raw -full -filter "userId eq '$($this.userID)' and userDirectory eq '$($this.userDirectory)'"
+    $present = $item -ne $null
+
+    if($this.Ensure -eq [Ensure]::Present)
+    {
+      if($present) {
+        if($this.hasProperties($item))
+        {
+          return $true
+        } else {
+          return $false
+        }
+      } else {
+        return $false
+      }
+    }
+    else
+    {
+      return -not $present
+    }
+  }
+
+  [QlikUser] Get()
+  {
+    $item = Get-QlikUser -raw -full -filter "userId eq '$($this.userID)' and userDirectory eq '$($this.userDirectory)'"
+    $present = $item -ne $null
+
+    if ($present)
+    {
+      $this.Name = $item.Name
+      $this.Roles = $item.Roles
+      $this.Ensure = [Ensure]::Present
+    }
+    else
+    {
+      $this.Ensure = [Ensure]::Absent
+    }
+
+    return $this
+  }
+
+  [bool] hasProperties($item)
+  {
+    if( !(CompareProperties $this $item @( 'Name' ) ) )
+    {
+      return $false
+    }
+
+    if($this.Roles) {
+      if(@($this.Roles).Count -ne @($item.Roles).Count) {
+        Write-Verbose "Test-HasProperties: Role count - $(@($item.Roles).Count) does not match desired state - $(@($this.Roles).Count)"
+        return $false
+      } else {
+        foreach($value in $item.Roles) {
+          if($this.Roles -notcontains $value) {
+            Write-Verbose "Test-HasProperties: Role - $($value) not found in desired state"
+            return $false
+          }
+        }
+      }
+    }
 
     return $true
   }
@@ -1706,6 +2227,34 @@ function CompareProperties( $expected, $actual, $prop )
   })
 
   return $result
+}
+
+function ConfigurePropertiesAndTags( $item ) {
+    $props = @()
+    foreach ($prop in $item.CustomProperties.Keys)
+    {
+      $cp = Get-QlikCustomProperty -filter "name eq '$prop'" -raw
+      if (-Not ($cp.choiceValues -contains $item.CustomProperties.$prop))
+      {
+        $cp.choiceValues += $item.CustomProperties.$prop
+        Write-Verbose -Message "Updating property $prop with new value of $($item.CustomProperties.$prop)"
+        Update-QlikCustomProperty -id $cp.id -choiceValues $cp.choiceValues
+      }
+      $props += "$($prop)=$($item.CustomProperties.$prop)"
+    }
+    $tags = @()
+    foreach ($tag in $item.Tags)
+    {
+      $tagId = (Get-QlikTag -filter "name eq '$tag'").id
+      if (-Not $tagId)
+      {
+        $tagId = (New-QlikTag -name $tag).id
+        Write-Verbose "Created tag for $tag with id $tagId"
+      }
+      $tags += $tag
+    }
+
+    return @{Properties = $props; Tags = $tags}
 }
 
 # ---------------- Move to new module when nested modules fixed in WMF -------------------

@@ -6,7 +6,7 @@ RootModule = 'QlikResources.psm1'
 DscResourcesToExport = '*'
 
 # Version number of this module.
-ModuleVersion = '1.0'
+ModuleVersion = '1.3'
 
 # ID used to uniquely identify this module
 GUID = '81624038-5e71-40f8-8905-b1a87afe22d7'
