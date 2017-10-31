@@ -760,6 +760,9 @@ class QlikNode{
   [DscProperty()]
   [bool]$Printing
 
+  [DscProperty()]
+  [bool]$Failover
+
   [DscProperty(Mandatory)]
   [Ensure]$Ensure
 
@@ -780,6 +783,7 @@ class QlikNode{
       if($this.Proxy) { $params.Add("proxyEnabled", $this.Proxy) }
       if($this.Scheduler) { $params.Add("schedulerEnabled", $this.Scheduler) }
       if($this.Printing) { $params.Add("printingEnabled", $this.Printing) }
+      if($this.Failover) { $params.Add("failoverCandidate", $this.Failover) }
 
       if($present)
       {
@@ -830,6 +834,7 @@ class QlikNode{
       $this.Proxy = $item.ProxyEnabled
       $this.Scheduler = $item.SchedulerEnabled
       $this.Printing = $item.PrintingEnabled
+      $this.Failover = $item.FailoverCandidate
     }
     else
     {
