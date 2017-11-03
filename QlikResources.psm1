@@ -1329,6 +1329,28 @@ class QlikVirtualProxy{
   [DscProperty(Mandatory=$false)]
   [string[]]$proxy
 
+  [DscProperty(Mandatory=$false)]
+  [ValidateSet("ticket","static","dynamic","saml","jwt", IgnoreCase=$false)]
+  [string]$authenticationMethod
+
+  [DscProperty(Mandatory=$false)]
+  [string]$samlMetadataIdP
+
+  [DscProperty(Mandatory=$false)]
+  [string]$samlHostUri
+
+  [DscProperty(Mandatory=$false)]
+  [string]$samlEntityId
+
+  [DscProperty(Mandatory=$false)]
+  [string]$samlAttributeUserId
+
+  [DscProperty(Mandatory=$false)]
+  [string]$samlAttributeUserDirectory
+
+  [DscProperty(Mandatory=$false)]
+  [Int]$sessionInactivityTimeout
+
   [DscProperty(Mandatory)]
   [Ensure]$Ensure
 
@@ -1348,6 +1370,13 @@ class QlikVirtualProxy{
       If( $engines ) { $params.Add("loadBalancingServerNodes", $engines) }
       If( $this.websocketCrossOriginWhiteList ) { $params.Add("websocketCrossOriginWhiteList", $this.websocketCrossOriginWhiteList) }
       If( $this.authenticationModuleRedirectUri ) { $params.Add("authenticationModuleRedirectUri", $this.authenticationModuleRedirectUri) }
+      If( $this.authenticationMethod ) { $params.Add("authenticationMethod", $this.authenticationMethod) }
+      If( $this.samlMetadataIdP ) { $params.Add("samlMetadataIdP", $this.samlMetadataIdP) }
+      If( $this.samlHostUri ) { $params.Add("samlHostUri", $this.samlHostUri) }
+      If( $this.samlEntityId ) { $params.Add("samlEntityId", $this.samlEntityId) }
+      If( $this.samlAttributeUserId ) { $params.Add("samlAttributeUserId", $this.samlAttributeUserId) }
+      If( $this.samlAttributeUserDirectory ) { $params.Add("samlAttributeUserDirectory", $this.samlAttributeUserDirectory) }
+      If( $this.sessionInactivityTimeout ) { $params.Add("sessionInactivityTimeout", $this.sessionInactivityTimeout) }
 
       if($present)
       {
@@ -1414,6 +1443,13 @@ class QlikVirtualProxy{
       $this.authenticationModuleRedirectUri = $qvp.authenticationModuleRedirectUri
       $this.loadBalancingServerNodes = $qvp.loadBalancingServerNodes
       $this.websocketCrossOriginWhiteList = $qvp.websocketCrossOriginWhiteList
+      $this.authenticationMethod = $qvp.authenticationMethod
+      $this.samlMetadataIdP = $qvp.samlMetadataIdP
+      $this.samlHostUri = $qvp.samlHostUri
+      $this.samlEntityId = $qvp.samlEntityId
+      $this.samlAttributeUserId = $qvp.samlAttributeUserId
+      $this.samlAttributeUserDirectory = $qvp.samlAttributeUserDirectory
+      $this.sessionInactivityTimeout = $qvp.sessionInactivityTimeout
       $this.Ensure = [Ensure]::Present
     }
     else
@@ -1426,9 +1462,24 @@ class QlikVirtualProxy{
 
   [bool] hasProperties($item)
   {
-    if( !(CompareProperties $this $item @( 'Description', 'SessionCookieHeaderName', 'authenticationModuleRedirectUri' ) ) )
+    if( !(CompareProperties $this $item @( 'Description', 'SessionCookieHeaderName', 'authenticationModuleRedirectUri',
+        'samlMetadataIdP', 'samlHostUri', 'samlEntityId', 'samlAttributeUserId', 'samlAttributeUserDirectory', 'sessionInactivityTimeout' ) ) )
     {
       return $false
+    }
+
+    if($this.authenticationMethod) {
+        $authenticationMethodCode = switch ($this.authenticationMethod) {
+            'ticket'  { 0 }
+            'static'  { 1 }
+            'dynamic' { 2 }
+            'saml'    { 3 }
+            'jwt'     { 4 }
+        }
+        If($authenticationMethodCode -ne $item.authenticationMethod) {
+            Write-Verbose "Test-HasProperties: authenticationMethod - $($item.authenticationMethod) does not match desired state - $authenticationMethodCode"
+            return $false;
+        }
     }
 
     if($this.loadBalancingServerNodes) {
@@ -1621,6 +1672,135 @@ class QlikEngine {
         if($item.settings.standardReload -ne $this.StandardReload) {
             Write-Verbose "Test-HasProperties: Standard reload property value - $($item.settings.standardReload) does not match desired state - $($this.StandardReload)"
             $desiredState = $false
+        }
+        return $desiredState
+    }
+}
+
+[DscResource()]
+class QlikProxy {
+
+    [DscProperty(Key)]
+    [string]$Node
+
+    [DscProperty()]
+    [Int]$ListenPort
+
+    [DscProperty()]
+    [Bool]$AllowHttp
+
+    [DscProperty()]
+    [Int]$UnencryptedListenPort
+
+    [DscProperty()]
+    [Int]$AuthenticationListenPort
+
+    [DscProperty()]
+    [Bool]$KerberosAuthentication
+
+    [DscProperty()]
+    [Int]$UnencryptedAuthenticationListenPort
+
+    [DscProperty()]
+    [String]$SslBrowserCertificateThumbprint
+
+    [Void] Set () {
+        Write-Verbose "Get Qlik Proxy: $($this.Node)"
+        $item = Get-QlikProxy -Full -Filter "serverNodeConfiguration.hostName eq '$($this.Node)'"
+        if($item.id) {
+            $engparams = @{ "id" = $item.id }
+            if($this.ListenPort) { $engparams.Add("listenPort", $this.ListenPort) }
+            if($this.AllowHttp) { $engparams.Add("allowHttp", $this.AllowHttp) }
+            if($this.UnencryptedListenPort) { $engparams.Add("unencryptedListenPort", $this.UnencryptedListenPort) }
+            if($this.AuthenticationListenPort) { $engparams.Add("authenticationListenPort", $this.AuthenticationListenPort) }
+            if($this.KerberosAuthentication) { $engparams.Add("kerberosAuthentication", $this.KerberosAuthentication) }
+            if($this.UnencryptedAuthenticationListenPort) { $engparams.Add("unencryptedAuthenticationListenPort", $this.UnencryptedAuthenticationListenPort) }
+            if($this.SslBrowserCertificateThumbprint) { $engparams.Add("sslBrowserCertificateThumbprint", $this.SslBrowserCertificateThumbprint) }
+            Write-Verbose "Update Qlik Proxy: $($this.Node)"
+            Update-QlikProxy @engparams
+        } else {
+            Write-Verbose "Qlik Proxy '$($this.Node)' not found!"
+        }
+    }
+
+    [Bool] Test () {
+        Write-Verbose "Get Qlik Proxy: $($this.Node)"
+        $item = Get-QlikProxy -Full -Filter "serverNodeConfiguration.hostName eq '$($this.Node)'"
+        if($item -ne $null) {
+            if($this.hasProperties($item)) {
+                Write-Verbose "Qlik Proxy '$($this.Node)' is in desired state"
+                return $true
+            } else {
+                Write-Verbose "Qlik Proxy '$($this.Node)' is not in desired state"
+                return $false
+            }
+        } else {
+            Write-Verbose "Qlik Proxy '$($this.Node)' not found!"
+            return $false
+        }
+    }
+
+    [QlikProxy] Get () {
+        Write-Verbose "Get Qlik Proxy: $($this.Node)"
+        $item = Get-QlikProxy -Full -Filter "serverNodeConfiguration.hostName eq '$($this.Node)'"
+        if($item -ne $null) {
+          $this.ListenPort = $item.settings.listenPort
+          $this.AllowHttp = $item.settings.allowHttp
+          $this.UnencryptedListenPort = $item.settings.unencryptedListenPort
+          $this.AuthenticationListenPort = $item.settings.authenticationListenPort
+          $this.KerberosAuthentication = $item.settings.kerberosAuthentication
+          $this.UnencryptedAuthenticationListenPort = $item.settings.unencryptedAuthenticationListenPort
+          $this.SslBrowserCertificateThumbprint = $item.settings.sslBrowserCertificateThumbprint
+          $this.Ensure = [Ensure]::Present
+        } else {
+            $this.Ensure = [Ensure]::Absent
+        }
+        return $this
+    }
+
+    [bool] hasProperties($item) {
+        $desiredState = $true
+        if($this.ListenPort) {
+            if($item.settings.listenPort -ne $this.listenPort) {
+                Write-Verbose "Test-HasProperties: listenPort property value - $($item.settings.listenPort) does not match desired state - $($this.listenPort)"
+                $desiredState = $false
+            }
+        }
+        if($this.AllowHttp -ne $null) {
+            if($item.settings.allowHttp -ne $this.AllowHttp) {
+                Write-Verbose "Test-HasProperties: allowHttp property value - $($item.settings.allowHttp) does not match desired state - $($this.AllowHttp)"
+                $desiredState = $false
+            }
+        }
+        if($this.UnencryptedListenPort) {
+            if($item.settings.unencryptedListenPort -ne $this.UnencryptedListenPort) {
+                Write-Verbose "Test-HasProperties: Min memory use property value - $($item.settings.unencryptedListenPort) does not match desired state - $($this.UnencryptedListenPort)"
+                $desiredState = $false
+            }
+        }
+        if($this.AuthenticationListenPort) {
+            if($item.settings.authenticationListenPort -ne $this.AuthenticationListenPort) {
+                Write-Verbose "Test-HasProperties: Max memory usage property value - $($item.settings.authenticationListenPort) does not match desired state - $($this.AuthenticationListenPort)"
+                $desiredState = $false
+            }
+        }
+        if($this.KerberosAuthentication) {
+            if($item.settings.kerberosAuthentication -ne $this.KerberosAuthentication) {
+                Write-Verbose "Test-HasProperties: CPU throttle property value - $($item.settings.kerberosAuthentication) does not match desired state - $($this.KerberosAuthentication)"
+                $desiredState = $false
+            }
+        }
+        if($this.UnencryptedAuthenticationListenPort) {
+            if($item.settings.unencryptedAuthenticationListenPort -ne $this.UnencryptedAuthenticationListenPort) {
+                Write-Verbose "Test-HasProperties: Allow data lineage property value - $($item.settings.unencryptedAuthenticationListenPort) does not match desired state - $($this.UnencryptedAuthenticationListenPort)"
+                $desiredState = $false
+            }
+        }
+        if($this.SslBrowserCertificateThumbprint) {
+            if($item.settings.sslBrowserCertificateThumbprint -ne $this.SslBrowserCertificateThumbprint) {
+                Write-Verbose "Test-HasProperties: Standard reload property value - $($item.settings.sslBrowserCertificateThumbprint) does not match desired state - $($this.SslBrowserCertificateThumbprint)"
+                $desiredState = $false
+            }
         }
         return $desiredState
     }
