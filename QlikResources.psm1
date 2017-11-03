@@ -1550,17 +1550,21 @@ class QlikVirtualProxy{
     }
 
     if ($this.proxyFilter) {
+      $globalMatch = $true
       Get-QlikProxy -raw -full -filter $this.proxyFilter | foreach {
         $match  = $false
-        $_.virtualProxies | foreach {
+        $_.settings.virtualProxies | foreach {
             If($_.id -eq $item.id) {
                 $match = $true
             }
         }
         If(!$match) {
             Write-Verbose "Test-HasProperties: $_ not linked"
-            return $false
+            $globalMatch = $false
         }
+      }
+      If (!$globalMatch) {
+        return $false
       }
     }
 
@@ -1760,6 +1764,7 @@ class QlikProxy {
             if($this.KerberosAuthentication) { $engparams.Add("kerberosAuthentication", $this.KerberosAuthentication) }
             if($this.UnencryptedAuthenticationListenPort) { $engparams.Add("unencryptedAuthenticationListenPort", $this.UnencryptedAuthenticationListenPort) }
             if($this.SslBrowserCertificateThumbprint) { $engparams.Add("sslBrowserCertificateThumbprint", $this.SslBrowserCertificateThumbprint) }
+            if($this.CustomProperties) { $engparams.Add("customProperties", $this.CustomProperties) }
             Write-Verbose "Update Qlik Proxy: $($this.Node)"
             Update-QlikProxy @engparams
         } else {
@@ -1844,6 +1849,20 @@ class QlikProxy {
             if($item.settings.sslBrowserCertificateThumbprint -ne $this.SslBrowserCertificateThumbprint) {
                 Write-Verbose "Test-HasProperties: Standard reload property value - $($item.settings.sslBrowserCertificateThumbprint) does not match desired state - $($this.SslBrowserCertificateThumbprint)"
                 $desiredState = $false
+            }
+        }
+        if($this.CustomProperties) {
+            $propList = $item.customProperties | foreach { "$($_.definition.name)=$($_.value)" }
+            if(@($propList).Count -ne @($this.CustomProperties).Count) {
+                Write-Verbose "Test-HasProperties: custom properties count differ - $(@($propList).Count) does not match desired state - $(@($this.CustomProperties).Count)"
+                $desiredState = $false
+            } else {
+                $propList | foreach {
+                    If (!($this.CustomProperties -contains $_)) {
+                        Write-Verbose "Test-HasProperties: custom property - '$_' does not match desired state"
+                        $desiredState = $false
+                    }
+                }
             }
         }
         return $desiredState
