@@ -1329,6 +1329,28 @@ class QlikVirtualProxy{
   [DscProperty(Mandatory=$false)]
   [string[]]$proxy
 
+  [DscProperty(Mandatory=$false)]
+  [ValidateSet("ticket","static","dynamic","saml","jwt", IgnoreCase=$false)]
+  [string]$authenticationMethod
+
+  [DscProperty(Mandatory=$false)]
+  [string]$samlMetadataIdP
+
+  [DscProperty(Mandatory=$false)]
+  [string]$samlHostUri
+
+  [DscProperty(Mandatory=$false)]
+  [string]$samlEntityId
+
+  [DscProperty(Mandatory=$false)]
+  [string]$samlAttributeUserId
+
+  [DscProperty(Mandatory=$false)]
+  [string]$samlAttributeUserDirectory
+
+  [DscProperty(Mandatory=$false)]
+  [Int]$sessionInactivityTimeout
+
   [DscProperty(Mandatory)]
   [Ensure]$Ensure
 
@@ -1348,6 +1370,13 @@ class QlikVirtualProxy{
       If( $engines ) { $params.Add("loadBalancingServerNodes", $engines) }
       If( $this.websocketCrossOriginWhiteList ) { $params.Add("websocketCrossOriginWhiteList", $this.websocketCrossOriginWhiteList) }
       If( $this.authenticationModuleRedirectUri ) { $params.Add("authenticationModuleRedirectUri", $this.authenticationModuleRedirectUri) }
+      If( $this.authenticationMethod ) { $params.Add("authenticationMethod", $this.authenticationMethod) }
+      If( $this.samlMetadataIdP ) { $params.Add("samlMetadataIdP", $this.samlMetadataIdP) }
+      If( $this.samlHostUri ) { $params.Add("samlHostUri", $this.samlHostUri) }
+      If( $this.samlEntityId ) { $params.Add("samlEntityId", $this.samlEntityId) }
+      If( $this.samlAttributeUserId ) { $params.Add("samlAttributeUserId", $this.samlAttributeUserId) }
+      If( $this.samlAttributeUserDirectory ) { $params.Add("samlAttributeUserDirectory", $this.samlAttributeUserDirectory) }
+      If( $this.sessionInactivityTimeout ) { $params.Add("sessionInactivityTimeout", $this.sessionInactivityTimeout) }
 
       if($present)
       {
@@ -1414,6 +1443,13 @@ class QlikVirtualProxy{
       $this.authenticationModuleRedirectUri = $qvp.authenticationModuleRedirectUri
       $this.loadBalancingServerNodes = $qvp.loadBalancingServerNodes
       $this.websocketCrossOriginWhiteList = $qvp.websocketCrossOriginWhiteList
+      $this.authenticationMethod = $qvp.authenticationMethod
+      $this.samlMetadataIdP = $qvp.samlMetadataIdP
+      $this.samlHostUri = $qvp.samlHostUri
+      $this.samlEntityId = $qvp.samlEntityId
+      $this.samlAttributeUserId = $qvp.samlAttributeUserId
+      $this.samlAttributeUserDirectory = $qvp.samlAttributeUserDirectory
+      $this.sessionInactivityTimeout = $qvp.sessionInactivityTimeout
       $this.Ensure = [Ensure]::Present
     }
     else
@@ -1426,9 +1462,24 @@ class QlikVirtualProxy{
 
   [bool] hasProperties($item)
   {
-    if( !(CompareProperties $this $item @( 'Description', 'SessionCookieHeaderName', 'authenticationModuleRedirectUri' ) ) )
+    if( !(CompareProperties $this $item @( 'Description', 'SessionCookieHeaderName', 'authenticationModuleRedirectUri',
+        'samlMetadataIdP', 'samlHostUri', 'samlEntityId', 'samlAttributeUserId', 'samlAttributeUserDirectory', 'sessionInactivityTimeout' ) ) )
     {
       return $false
+    }
+
+    if($this.authenticationMethod) {
+        $authenticationMethodCode = switch ($this.authenticationMethod) {
+            'ticket'  { 0 }
+            'static'  { 1 }
+            'dynamic' { 2 }
+            'saml'    { 3 }
+            'jwt'     { 4 }
+        }
+        If($authenticationMethodCode -ne $item.authenticationMethod) {
+            Write-Verbose "Test-HasProperties: authenticationMethod - $($item.authenticationMethod) does not match desired state - $authenticationMethodCode"
+            return $false;
+        }
     }
 
     if($this.loadBalancingServerNodes) {
