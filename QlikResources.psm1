@@ -1752,6 +1752,9 @@ class QlikProxy {
     [DscProperty()]
     [String[]]$CustomProperties
 
+    [DscProperty()]
+    [String[]]$VirtualProxies
+
     [Void] Set () {
         Write-Verbose "Get Qlik Proxy: $($this.Node)"
         $item = Get-QlikProxy -Full -Filter "serverNodeConfiguration.hostName eq '$($this.Node)'"
@@ -1765,6 +1768,7 @@ class QlikProxy {
             if($this.UnencryptedAuthenticationListenPort) { $engparams.Add("unencryptedAuthenticationListenPort", $this.UnencryptedAuthenticationListenPort) }
             if($this.SslBrowserCertificateThumbprint) { $engparams.Add("sslBrowserCertificateThumbprint", $this.SslBrowserCertificateThumbprint) }
             if($this.CustomProperties) { $engparams.Add("customProperties", $this.CustomProperties) }
+            if($null -ne $this.VirtualProxies) { $engparams.Add("virtualProxies", $this.VirtualProxies) }
             Write-Verbose "Update Qlik Proxy: $($this.Node)"
             Update-QlikProxy @engparams
         } else {
@@ -1800,6 +1804,7 @@ class QlikProxy {
           $this.KerberosAuthentication = $item.settings.kerberosAuthentication
           $this.UnencryptedAuthenticationListenPort = $item.settings.unencryptedAuthenticationListenPort
           $this.SslBrowserCertificateThumbprint = $item.settings.sslBrowserCertificateThumbprint
+          $this.VirtualProxies = $item.settings.virtualProxies
           $this.Ensure = [Ensure]::Present
         } else {
             $this.Ensure = [Ensure]::Absent
@@ -1860,6 +1865,31 @@ class QlikProxy {
                 $propList | foreach {
                     If (!($this.CustomProperties -contains $_)) {
                         Write-Verbose "Test-HasProperties: custom property - '$_' does not match desired state"
+                        $desiredState = $false
+                    }
+                }
+            }
+        }
+        if($null -ne $this.VirtualProxies) {
+            $vProxList = $item.settings.virtualProxies | foreach { $_.id }
+            $set = New-Object System.Collections.Generic.HashSet[string]
+            $this.VirtualProxies | foreach {
+              $eid = Get-QlikVirtualProxy -filter "prefix eq '$_'"
+              If( $eid )
+              {
+                $res = $set.Add($eid.id)
+              }
+            }
+            Get-QlikVirtualProxy -filter "defaultVirtualProxy eq True" | foreach {
+              $res = $set.Add($_.id)
+            }
+            if(@($vProxList).Count -ne $set.Count) {
+                Write-Verbose "Test-HasProperties: custom properties count differ - $(@($vProxList).Count) does not match desired state - $($set.Count)"
+                $desiredState = $false
+            } else {
+                $vProxList | foreach {
+                    If (!($set -contains $_)) {
+                        Write-Verbose "Test-HasProperties: virtual proxy - '$_' does not match desired state"
                         $desiredState = $false
                     }
                 }
