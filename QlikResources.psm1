@@ -1871,17 +1871,21 @@ class QlikProxy {
             }
         }
         if($null -ne $this.VirtualProxies) {
-            $vProxList = $item.settings.virtualProxies | foreach { $_.id }
             $set = New-Object System.Collections.Generic.HashSet[string]
-            $this.VirtualProxies | foreach {
-              $eid = Get-QlikVirtualProxy -filter "prefix eq '$_'"
-              If( $eid )
-              {
-                $res = $set.Add($eid.id)
+            $vProxList = $item.settings.virtualProxies | foreach {
+              If ($_.defaultVirtualProxy) {
+                $res = $set.Add($_.id)
               }
+              $_.id
             }
-            Get-QlikVirtualProxy -filter "defaultVirtualProxy eq True" | foreach {
-              $res = $set.Add($_.id)
+            $this.VirtualProxies | foreach {
+              If ($_ -ne '') {
+                $eid = Get-QlikVirtualProxy -filter "prefix eq '$_'"
+                  If( $eid )
+                  {
+                    $res = $set.Add($eid.id)
+                  }
+              }
             }
             if(@($vProxList).Count -ne $set.Count) {
                 Write-Verbose "Test-HasProperties: custom properties count differ - $(@($vProxList).Count) does not match desired state - $($set.Count)"
