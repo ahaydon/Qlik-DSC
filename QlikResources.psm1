@@ -46,7 +46,7 @@ class QlikApp{
     $item = Get-QlikApp -raw -full -filter "name eq '$($this.name)' and (stream.name eq '$($this.Stream)' or stream eq null)"
     if(@($item).count -gt 1)
     {
-        $item = $item | ? stream -eq $this.Stream
+        $item = $item | ? {$_.stream.name -eq $this.Stream}
     }
     $present = $item -ne $null
 
@@ -57,6 +57,7 @@ class QlikApp{
         Write-Verbose "App not found but should be present"
         Write-Verbose -Message "Importing app from $($this.Source)"
         $item = Import-QlikApp -file $this.Source -name $this.Name -upload
+        $this.configure($item)
         if ($this.ReloadOn -eq [ReloadOn]::Create)
         {
           Write-Verbose "Reloading app since ReloadOn is set to $($this.ReloadOn)"
@@ -82,6 +83,7 @@ class QlikApp{
           Wait-QlikExecution -taskId $task.id
         }
         Switch-QlikApp -id $replace.id -appId $item.id
+        $this.configure($item)
         Remove-QlikApp -id $replace.id
       }
     #  $props = @()
@@ -108,7 +110,6 @@ class QlikApp{
     #    $appTags += $tag
     #  }
     #  Update-QlikApp -id $item.id -tags $appTags -customProperties $props
-      $this.configure($item)
       if (($this.Stream -ne ".") -And ($this.Stream -ne $item.stream.name))
       {
         $streamId = (Get-QlikStream -filter "name eq '$($this.Stream)'" -raw).id
@@ -130,7 +131,7 @@ class QlikApp{
     $item = Get-QlikApp -raw -full -filter "name eq '$($this.name)' and (stream.name eq '$($this.Stream)' or stream eq null)"
     if(@($item).count -gt 1)
     {
-      $item = $item | ? stream -eq $this.Stream
+      $item = $item | ? {$_.stream.name -eq $this.Stream}
     }
     $present = $item -ne $null
 
@@ -166,7 +167,7 @@ class QlikApp{
     $item = Get-QlikApp -raw -full -filter "name eq '$($this.name)' and (stream.name eq '$($this.Stream)' or stream eq null)"
     if(@($item).count -gt 1)
     {
-      $item = $item | ? stream -eq $this.Stream
+      $item = $item | ? {$_.stream.name -eq $this.Stream}
     }
     $present = $item -ne $null
 
@@ -545,14 +546,20 @@ class QlikDataConnection{
   [string]$ConnectionString
 
   [DscProperty()]
-  [string]$Tags
+  [string]$UserID
+
+  [DscProperty()]
+  [string]$Password
+
+  [DscProperty()]
+  [string[]]$Tags
 
   [DscProperty(Mandatory)]
   [string]$Type
 
   [void] Set()
   {
-    $item = Get-QlikDataConnection -raw -filter "name eq '$($this.name)'"
+    $item = Get-QlikDataConnection -raw -full -filter "name eq '$($this.name)'"
     $present = $item -ne $null
     if($this.ensure -eq [Ensure]::Present)
     {
@@ -561,7 +568,7 @@ class QlikDataConnection{
           $item = New-QlikDataConnection -Name $this.Name -ConnectionString $this.ConnectionString -Type $this.Type
       }
       $prop = ConfigurePropertiesAndTags($this)
-      Update-QlikDataConnection -id $item.id -ConnectionString $this.ConnectionString -Tags $prop.tags
+      Update-QlikDataConnection -id $item.id -ConnectionString $this.ConnectionString @prop
     }
     else
     {
@@ -575,7 +582,7 @@ class QlikDataConnection{
 
   [bool] Test()
   {
-    $item = Get-QlikDataConnection -raw -filter "name eq '$($this.name)'"
+    $item = Get-QlikDataConnection -raw -full -filter "name eq '$($this.name)'"
     $present = $item -ne $null
 
     if($this.Ensure -eq [Ensure]::Present)
@@ -599,7 +606,7 @@ class QlikDataConnection{
 
   [QlikDataConnection] Get()
   {
-    $present = $(Get-QlikDataConnection -raw -filter "name eq '$($this.name)'") -ne $null
+    $present = $(Get-QlikDataConnection -raw -full -filter "name eq '$($this.name)'") -ne $null
 
     if ($present)
     {
@@ -1127,14 +1134,14 @@ class QlikTask{
   [DscProperty(Mandatory)]
   [string]$App
 
-  [DscProperty()]
+  [DscProperty(Key)]
   [string]$Stream
 
   [DscProperty()]
   [hashtable]$Schedule
 
   [DscProperty()]
-  [string]$OnSuccess
+  [string[]]$OnSuccess
 
   [DscProperty()]
   [ReloadOn]$StartOn
@@ -1143,7 +1150,7 @@ class QlikTask{
   [bool]$WaitUntilFinished
 
   [DscProperty()]
-  [string]$Tags
+  [string[]]$Tags
 
   [DscProperty(Mandatory)]
   [Ensure]$Ensure
@@ -1160,7 +1167,7 @@ class QlikTask{
         Write-Verbose "Task not found but should be present"
         $appfilter = "name eq '$($this.App)'"
         if($this.Stream -ne $null){ $appfilter += " and stream.name eq '$($this.Stream)'"}
-        $item = New-QlikTask -name $this.Name -appId (Get-QlikApp -filter $appfilter).id
+        $item = New-QlikTask -name $this.Name -appId (Get-QlikApp -filter $appfilter).id -tags $this.Tags
         Write-Verbose -Message "Created task with id $($item.id)"
         if ($this.StartOn -eq [ReloadOn]::Create)
         {
@@ -1187,7 +1194,7 @@ class QlikTask{
         #  $appTags += $tag
         #}
         $prop = ConfigurePropertiesAndTags($this)
-        Update-QlikReloadTask -id $item.id -tags $prop.Tags
+        Update-QlikReloadTask -id $item.id -tags $this.Tags
         if ($this.StartOn -eq [ReloadOn]::Update)
         {
           Write-Verbose "Starting task since StartOn is set to $($this.StartOn)"
@@ -1203,9 +1210,21 @@ class QlikTask{
       {
         Add-QlikTrigger -taskId $item.id -date $this.Schedule.Date
       }
-      elseif ($this.OnSuccess -And (-Not (Invoke-QlikGet "/qrs/compositeevent?filter=compositeRules.reloadTask.id eq $($this.OnSuccess) and reloadTask.id eq $($item.id)")))
+      elseif ($this.OnSuccess)
       {
-        Add-QlikTrigger -taskId $item.id -OnSuccess $this.OnSuccess
+        $trigger_tasks = $this.ResolveTriggerTaskIDs()
+        foreach ($taskID in $trigger_tasks)
+        {
+          if (($taskID) -And (-Not (Invoke-QlikGet "/qrs/compositeevent?filter=compositeRules.reloadTask.id eq $taskID and reloadTask.id eq $($item.id)")))
+          {
+            Write-Verbose "Trigger for OnSuccess event of task $taskID does not exist"
+            Add-QlikTrigger -taskId $item.id -OnSuccess $trigger_tasks
+          }
+          else
+          {
+            Write-Warning "Can't add trigger for non-existent task"
+          }
+        }
       }
     }
     else
@@ -1283,10 +1302,18 @@ class QlikTask{
       $result = $false
     }
 
-    if ($this.OnSuccess -And (-Not (Invoke-QlikGet "/qrs/compositeevent?filter=compositeRules.reloadTask.id eq $($this.OnSuccess) and reloadTask.id eq $($item.id)")))
+    #if ($this.OnSuccess -And (-Not (Invoke-QlikGet "/qrs/compositeevent?filter=compositeRules.reloadTask.id eq $($this.OnSuccess) and reloadTask.id eq $($item.id)")))
+    if ($this.OnSuccess)
     {
-      Write-Verbose "Trigger for OnSuccess event of task $($this.OnSuccess) does not exist"
-      $result = $false
+      $trigger_tasks = $this.ResolveTriggerTaskIDs()
+      foreach ($taskID in $trigger_tasks)
+      {
+        if (($taskID) -And (-Not (Invoke-QlikGet "/qrs/compositeevent?filter=compositeRules.reloadTask.id eq $taskID and reloadTask.id eq $($item.id)")))
+        {
+          Write-Verbose "Trigger for OnSuccess event of task $taskID does not exist"
+          $result = $false
+        }
+      }
     }
 
     if ($this.Tags)
@@ -1302,6 +1329,30 @@ class QlikTask{
     }
 
     return $result
+  }
+
+  [string[]] ResolveTriggerTaskIDs()
+  {
+    $trigger_tasks = @()
+    foreach ($value in $this.OnSuccess)
+    {
+      if ($value -Match "^(\{){0,1}[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}(\}){0,1}$")
+      {
+        Write-Verbose "Adding $value to OnSuccess for task trigger"
+        $trigger_tasks += $value
+      }
+      elseif ($value.SubString(0, 1) -eq '{')
+      {
+        Write-Verbose "Executing script block to resolve OnSuccess task trigger"
+        $trigger_tasks += [scriptblock]::Create($value).InvokeReturnAsIs().id
+      }
+      else
+      {
+        Write-Verbose "Adding tasks matching ""$value"" to OnSuccess task trigger"
+        $trigger_tasks += (Get-QlikTask -filter $value -raw).id
+      }
+    }
+    return $trigger_tasks
   }
 }
 
@@ -1951,7 +2002,7 @@ class QlikStream{
 
   [void] Set()
   {
-    $item = Get-QlikStream -filter "name eq '$($this.Name)'"
+    $item = Get-QlikStream -full -raw -filter "name eq '$($this.Name)'"
     $present = $item -ne $null
 
     if ($this.ensure -eq [Ensure]::Present)
@@ -1976,7 +2027,7 @@ class QlikStream{
 
   [bool] Test()
   {
-    $item = Get-QlikStream -filter "name eq '$($this.Name)'"
+    $item = Get-QlikStream -full -raw -filter "name eq '$($this.Name)'"
     $present = $item -ne $null
 
     if ($this.Ensure -eq [Ensure]::Present)
@@ -2014,7 +2065,7 @@ class QlikStream{
 
   [QlikStream] Get()
   {
-    $item = Get-QlikStream -filter "name eq '$($this.Name)'"
+    $item = Get-QlikStream -full -raw -filter "name eq '$($this.Name)'"
     if ($item -ne $null)
     {
       $this.Ensure = [Ensure]::Present
@@ -2415,6 +2466,7 @@ function CompareProperties( $expected, $actual, $prop )
 }
 
 function ConfigurePropertiesAndTags( $item ) {
+    $return = @{}
     $props = @()
     foreach ($prop in $item.CustomProperties.Keys)
     {
@@ -2439,7 +2491,9 @@ function ConfigurePropertiesAndTags( $item ) {
       $tags += $tag
     }
 
-    return @{Properties = $props; Tags = $tags}
+    if($props) {$return.Add('customProperties', $props)}
+    if($tags) {$return.Add('tags', $tags)}
+    return $return
 }
 
 # ---------------- Move to new module when nested modules fixed in WMF -------------------
