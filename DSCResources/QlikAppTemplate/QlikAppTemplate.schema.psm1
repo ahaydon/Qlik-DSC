@@ -12,7 +12,7 @@ Configuration QlikAppTemplate
       [string] $TemplateHashPropertyName = "TemplateHash",
       [string] $ReduceValuePropertyName = "ReduceValue"
   )
-  Import-DSCResource -ModuleName QlikResources
+  Import-DSCResource -ModuleName PSDesiredStateConfiguration
 
   #QlikCustomProperty "$TemplatePropertyName-$AppName-$Stream"
   #{

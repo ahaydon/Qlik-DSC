@@ -15,7 +15,7 @@ Configuration QlikCentral
       [string] $Hostname = $(hostname)
   )
 
-  Import-DscResource -ModuleName PSDesiredStateConfiguration, QlikResources, xNetworking, xPSDesiredStateConfiguration, xSmbShare
+  Import-DscResource -ModuleName PSDesiredStateConfiguration, xNetworking, xPSDesiredStateConfiguration, xSmbShare
 
   if (-Not $DbCredential) {
     $DbCredential = New-Object System.Management.Automation.PSCredential('qliksenserepository', $SenseService.GetNetworkCredential().SecurePassword)

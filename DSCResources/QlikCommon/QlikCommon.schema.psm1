@@ -2,7 +2,7 @@ Configuration QlikCommon
 {
   param (
   )
-  Import-DSCResource -ModuleName xPSDesiredStateConfiguration,xNetworking,QlikResources
+  Import-DSCResource -ModuleName PSDesiredStateConfiguration, xPSDesiredStateConfiguration, xNetworking
 
   xFirewall QRS-Sync
   {

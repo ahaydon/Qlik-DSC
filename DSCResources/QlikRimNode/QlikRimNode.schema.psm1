@@ -7,7 +7,7 @@ Configuration QlikRimNode
       [bool] $Scheduler = [bool](Get-Service QlikSenseSchedulerService -ErrorAction Ignore),
       [bool]$ApplyCommon
   )
-  Import-DSCResource -ModuleName xNetworking,QlikResources
+  Import-DSCResource -ModuleName xNetworking
 
   xFirewall Qlik-Cert
   {

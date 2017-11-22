@@ -7,7 +7,7 @@ Configuration SharedPersist
     [int] $DBPort = 4432,
     [PSCredential] $DBPassword
   )
-  Import-DSCResource -ModuleName xNetworking,xSmbShare,QlikResources
+  Import-DSCResource -ModuleName xNetworking,xSmbShare
 
   if ($IsCentral)
   {

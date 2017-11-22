@@ -7,7 +7,7 @@ Configuration PostgreSQL
     [string[]] $HostAccess,
     [string] $ListenAddresses
   )
-  Import-DSCResource -ModuleName xPSDesiredStateConfiguration,xNetworking,QlikResources
+  Import-DSCResource -ModuleName xPSDesiredStateConfiguration,xNetworking
 
   xFirewall QRD-postgresql
   {
