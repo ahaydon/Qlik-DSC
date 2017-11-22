@@ -1,14 +1,115 @@
 Configuration QlikCentral
 {
-  param (
-    [PSObject]$License,
-    [bool]$ApplyCommon = $true
+  Param (
+      [PSCredential] $SenseService,
+      [PSCredential] $QlikAdmin,
+      [string] $ProductName,
+      [string] $SetupPath,
+      [string] $PatchPath,
+      [string] $ClusterPath = 'C:\QlikShare',
+      [string] $ClusterShareName = 'QlikShare',
+      [string] $ClusterShareHost = $(hostname),
+      [PSCredential] $DbSuperUserPassword,
+      [PSCredential] $DbCredential,
+      [PSObject] $License,
+      [string] $Hostname = $(hostname)
   )
-  Import-DSCResource -ModuleName xNetworking,xSmbShare,QlikResources
 
-  if ($ApplyCommon) {
-    QlikCommon Common
-    {}
+  Import-DscResource -ModuleName PSDesiredStateConfiguration, QlikResources, xNetworking, xPSDesiredStateConfiguration, xSmbShare
+
+  if (-Not $DbCredential) {
+    $DbCredential = New-Object System.Management.Automation.PSCredential('qliksenserepository', $SenseService.GetNetworkCredential().SecurePassword)
+  }
+
+  if (-Not $DbSuperUserPassword) { $DbSuperUserPassword = $SenseService }
+
+  File QlikClusterRoot
+  {
+      Type = 'Directory'
+      DestinationPath = $ClusterPath
+      Ensure = 'Present'
+  }
+
+  xSmbShare QlikClusterShare
+  {
+      Path = $ClusterPath
+      Name = $ClusterShareName
+      FullAccess = $SenseService.GetNetworkCredential().UserName
+      Ensure = 'Present'
+      DependsOn = '[File]QlikClusterRoot'
+  }
+
+  QlikPackage Sense_Setup
+  {
+      Name = $ProductName
+      #ProductId = '{0c721ce8-57a8-4fef-9edb-a301370fad93}'
+      Setup = $SetupPath
+      Patch = $PatchPath
+      PsDscRunAsCredential = $SenseService
+      ServiceCredential = $SenseService
+      RootDir = "\\$ClusterShareHost\$ClusterShareName"
+      DbSuperUserPassword = $DbSuperUserPassword
+      DbCredential = $DbCredential
+      CreateCluster = $true
+      InstallLocalDb = $true
+      Hostname = $Hostname
+      Ensure = 'Present'
+      DependsOn = '[xSmbShare]QlikClusterShare'
+  }
+
+  xService QRD
+  {
+    Name = "QlikSenseRepositoryDatabase"
+    State = "Running"
+    DependsOn = "[QlikPackage]Sense_Setup"
+  }
+
+  xService QRS
+  {
+    Name = "QlikSenseRepositoryService"
+    State = "Running"
+    DependsOn = "[xService]QRD"
+  }
+
+  xService QPR
+  {
+    Name = "QlikSensePrintingService"
+    State = "Running"
+    DependsOn = "[xService]QRS"
+  }
+
+  xService QSS
+  {
+    Name = "QlikSenseSchedulerService"
+    State = "Running"
+    DependsOn = "[xService]QRS"
+  }
+
+  xService QES
+  {
+    Name = "QlikSenseEngineService"
+    State = "Running"
+    DependsOn = "[xService]QRS"
+  }
+
+  xService QPS
+  {
+    Name = "QlikSenseProxyService"
+    State = "Running"
+    DependsOn = "[xService]QRS"
+  }
+
+  xService QSD
+  {
+    Name = "QlikSenseServiceDispatcher"
+    State = "Running"
+    DependsOn = "[xService]QRS"
+  }
+
+  QlikConnect SenseCentral
+  {
+    Username      = "$Hostname\vagrant"
+    DependsOn     = "[xService]QPS"
   }
 
   QlikLicense SiteLicense
@@ -19,131 +120,43 @@ Configuration QlikCentral
     Organization = $License.Organization
     Lef          = $License.Lef
     Ensure       = "Present"
+    DependsOn    = "[QlikConnect]SenseCentral"
   }
 
-  #QlikCustomProperty Role
-  #{
-  #  Name         = "Role"
-  #  ChoiceValues = "Proxy", "Engine", "Scheduler"
-  #  ObjectTypes  = "ServerNodeConfiguration"
-  #  Ensure       = "Present"
-  #  DependsOn    = "[QlikLicense]SiteLicense"
-  #}
-
-  #if (Connect-Qlik -ErrorAction SilentlyContinue) {
-  #  QlikCustomProperty NodeAffinity
-  #  {
-  #    Name = "NodeAffinity"
-  #    ChoiceValues = @(Get-QlikNode -filter "@Role eq 'engine'" | foreach { $_.hostName })
-  #    ObjectTypes = ("App", "Stream")
-  #    Ensure = "Present"
-  #    DependsOn = "[QlikLicense]SiteLicense"
-  #  }
-  #
-  #  if( (Get-QlikNode -filter "schedulerEnabled eq true" -count).value -gt 1 -And (Get-QlikNode -filter "isCentral eq true and @role eq scheduler") -eq $null ) {
-  #    QlikScheduler Central
-  #    {
-  #      Node = "Central"
-  #      SchedulerServiceType = "Master"
-  #      DependsOn = "[QlikDataConnection]ServerLogFolder", "[QlikDataConnection]ArchivedLogsFolder"
-  #    }
-  #  } else {
-  #    QlikScheduler Central
-  #    {
-  #      Node = "Central"
-  #      SchedulerServiceType = "Both"
-  #    }
-  #  }
-  #}
-
-  #QlikDataConnection ServerLogFolder
-  #{
-  #  Name = "ServerLogFolder"
-  #  ConnectionString = "\\$CentralNode\QlikLog"
-  #  Type = "Folder"
-  #  Ensure = "Present"
-  #  DependsOn = "[xSmbShare]QlikLog", "[QlikLicense]SiteLicense"
-  #}
-  #
-  #QlikDataConnection ArchivedLogsFolder
-  #{
-  #  Name = "ArchivedLogsFolder"
-  #  ConnectionString = "\\$CentralNode\QlikArchiveLog"
-  #  Type = "Folder"
-  #  Ensure = "Present"
-  #  DependsOn = "[xSmbShare]QlikArchiveLog", "[QlikLicense]SiteLicense"
-  #}
-
-  #QlikRule ResourcesOnNonCentralNodes
-  #{
-  #  Name = "ResourcesOnNonCentralNodes"
-  #  Disabled = $true
-  #  Ensure = "Present"
-  #  #DependsOn = "[QlikDataConnection]ServerLogFolder", "[QlikDataConnection]ArchivedLogsFolder"
-  #}
-
-  #QlikRule ResourcesOnSchedulers
-  #{
-  #  Name = "ResourcesOnSchedulers"
-  #  Category = "sync"
-  #  Rule = '((node.@Role="Scheduler"))'
-  #  ResourceFilter = "App_*"
-  #  Ensure = "Present"
-  #  DependsOn = "[QlikCustomProperty]Role"
-  #}
-
-  #QlikRule ResourceNodeAffinity
-  #{
-  #  Name = "ResourceNodeAffinity"
-  #  Category = "sync"
-  #  Actions = 1
-  #  Rule = '((resource.@NodeAffinity=node.name or resource.stream.@NodeAffinity=node.name) or (resource.@NodeAffinity.Empty() and resource.stream.@NodeAffinity.Empty()))'
-  #  ResourceFilter = "App_*"
-  #  Ensure = "Present"
-  #  DependsOn = "[QlikCustomProperty]NodeAffinity"
-  #}
-
-  QlikRule RootAccess
+  QlikUser RootAdmin
   {
-    Name = "License rule to grant RootAdmin access"
-    Rule = '((user.roles="RootAdmin"))'
-    Category = "license"
-    Actions = 1
-    Comment = "Rule to setup automatic user access"
-    #RuleContext = "hub"
-    Ensure = "Present"
-    DependsOn = "[QlikLicense]SiteLicense"
+    UserID = $QlikAdmin.GetNetworkCredential().UserName
+    UserDirectory = $QlikAdmin.GetNetworkCredential().Domain
+    Name = 'Qlik Sense Root Admin'
+    Roles = 'RootAdmin'
+    Ensure = 'Present'
   }
 
-  #xSmbShare QlikLog
-  #{
-  #  Ensure = "Present"
-  #  Name   = "QlikLog"
-  #  Path = "C:\ProgramData\Qlik\Sense\Log"
-  #  FullAccess = "Administrators"
-  #  Description = "Qlik Sense Scheduler access to central logs"
-  #}
-  #
-  #xSmbShare QlikArchiveLog
-  #{
-  #  Ensure = "Present"
-  #  Name   = "QlikArchiveLog"
-  #  Path = "C:\ProgramData\Qlik\Sense\Repository\Archived Logs"
-  #  FullAccess = "Administrators"
-  #  Description = "Qlik Sense Scheduler access to archived logs"
-  #}
-
-  xFirewall QSS-Master
+  xFirewall QPS
   {
-    Name                  = "QSS-Master"
-    DisplayName           = "Qlik Sense Scheduler Master"
+    Name                  = "QPS"
+    DisplayName           = "Qlik Sense Proxy HTTPS"
     Group                 = "Qlik Sense"
     Ensure                = "Present"
     Action                = "Allow"
     Enabled               = "True"
     Profile               = ("Domain", "Private", "Public")
     Direction             = "InBound"
-    LocalPort             = ("5050")
+    LocalPort             = ("443")
+    Protocol              = "TCP"
+  }
+
+  xFirewall QPS-Auth
+  {
+    Name                  = "QPS-Auth"
+    DisplayName           = "Qlik Sense Proxy Authentication HTTPS"
+    Group                 = "Qlik Sense"
+    Ensure                = "Present"
+    Action                = "Allow"
+    Enabled               = "True"
+    Profile               = ("Domain", "Private", "Public")
+    Direction             = "InBound"
+    LocalPort             = ("4244")
     Protocol              = "TCP"
   }
 }

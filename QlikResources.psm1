@@ -2119,12 +2119,11 @@ class QlikPackage {
     [DscProperty(Key)]
     [String]$Name
 
-    [DscProperty(Key)]
-    [AllowEmptyString()]
-    [string]$ProductId
-
     [DscProperty(Mandatory)]
     [string]$Setup
+
+    [DscProperty()]
+    [string]$Patch
 
     [DscProperty(Mandatory)]
     [Ensure]$Ensure
@@ -2206,7 +2205,7 @@ class QlikPackage {
 
     [void] Set() {
         if($this.Ensure -eq [Ensure]::Present) {
-            Write-Verbose "Install $($this.Name) with ProductId '$($this.ProductId)'"
+            Write-Verbose "Install $($this.Name)"
             [String]$parsedSetupParams = "-silent"
             if($this.LogFile) { [String]$parsedSetupParams += " -log `"$($this.LogFile)`"" }
             if($this.SkipStartServices) { [String]$parsedSetupParams += " skipstartservices=1" }
@@ -2267,8 +2266,21 @@ class QlikPackage {
             $process.Start() | Out-Null
             $process.WaitForExit()
             Write-Verbose "$($this.Name) installation finished with Exitcode: $($process.ExitCode)"
+
+            if ($this.Patch) {
+              Write-Verbose "Starting `"$($this.Patch)`" install"
+              $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+              $startInfo.UseShellExecute = $false #Necessary for I/O redirection and just generally a good idea
+              $process = New-Object System.Diagnostics.Process
+              $process.StartInfo = $startInfo
+              $startInfo.FileName = $this.Patch
+              $startInfo.Arguments = "install"
+              $process.Start() | Out-Null
+              $process.WaitForExit()
+              Write-Verbose "$($this.Name) patch finished with Exitcode: $($process.ExitCode)"
+            }
         } else {
-            Write-Verbose "Uninstall $($this.Name)  with ProductId '$($this.ProductId)'"
+            Write-Verbose "Uninstall $($this.Name)"
             [String]$parsedSetupParams = "-silent -uninstall"
             if($this.LogFile) { [String]$parsedSetupParams += " -log `"$($this.LogFile)`"" }
             Write-Verbose "Starting `"$($this.Setup)`" $parsedSetupParams"
@@ -2289,28 +2301,18 @@ class QlikPackage {
         $regItem = (Get-ItemProperty HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object { $_.DisplayName -eq $this.Name })
         if($this.Ensure -eq [Ensure]::Present) {
             if($regItem) {
-                if($this.ProductId.Trim("{}") -eq $regItem.BundleProviderKey.Trim("{}")) {
-                    Write-Verbose "$($this.Name) installation with ProductId '$($this.ProductId)' is 'Present', in desired state."
-                    return $true
-                } else {
-                    Write-Verbose "$($this.Name) installation with ProductId '$($this.ProductId)' is 'Absent', not in desired state."
-                    return $false
-                }
+                Write-Verbose "$($this.Name) installation is 'Present', in desired state."
+                return $true
             } else {
-                Write-Verbose "$($this.Name) installation with ProductId '$($this.ProductId)' is 'Absent', not in desired state."
+                Write-Verbose "$($this.Name) installation is 'Absent', not in desired state."
                 return $false
             }
         } else {
             if($regItem) {
-                if($this.ProductId.Trim("{}") -eq $regItem.BundleProviderKey.Trim("{}")) {
-                    Write-Verbose "$($this.Name) installation with ProductId '$($this.ProductId)' is 'Present', not in desired state."
-                    return $false
-                } else {
-                    Write-Verbose "$($this.Name) installation with ProductId '$($this.ProductId)' is 'Absent', in desired state."
-                    return $true
-                }
+                Write-Verbose "$($this.Name) installation is 'Present', not in desired state."
+                return $false
             } else {
-                Write-Verbose "$($this.Name) installation with ProductId '$($this.ProductId)' is 'Absent', in desired state."
+                Write-Verbose "$($this.Name) installation is 'Absent', in desired state."
                 return $true
             }
         }
@@ -2319,10 +2321,8 @@ class QlikPackage {
     [QlikPackage] Get() {
         $regItem = (Get-ItemProperty HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object { $_.DisplayName -eq "Qlik Sense" })
         if($regItem) {
-            #$this.ProductId = $regItem.BundleProviderKey.Trim("{}")
             $this.Ensure = [Ensure]::Present
         } else {
-            #$this.ProductId = $null
             $this.Ensure = [Ensure]::Absent
         }
         return @{}
