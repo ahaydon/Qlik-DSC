@@ -12,16 +12,35 @@ Configuration QlikCentral
       [PSCredential] $DbSuperUserPassword,
       [PSCredential] $DbCredential,
       [PSObject] $License,
-      [string] $Hostname = $(hostname)
+      [string] $Hostname = $(hostname),
+      [bool]$ConfigureLogging = $true,
+      [bool]$SetupLocalLoggingDb = $true,
+      [PSCredential]$QLogsWriterPassword,
+      [PSCredential]$QLogsReaderPassword,
+      [string]$QLogsHostname,
+      [int]$QLogsPort = 4432
   )
 
   Import-DscResource -ModuleName PSDesiredStateConfiguration, xNetworking, xPSDesiredStateConfiguration, xSmbShare
 
   if (-Not $DbCredential) {
-    $DbCredential = New-Object System.Management.Automation.PSCredential('qliksenserepository', $SenseService.GetNetworkCredential().SecurePassword)
+    $DbCredential = New-Object System.Management.Automation.PSCredential('qliksenserepository', $SenseService.Password)
   }
-
-  if (-Not $DbSuperUserPassword) { $DbSuperUserPassword = $SenseService }
+  if (-Not $DbSuperUserPassword) {
+    $DbSuperUserPassword = $SenseService
+  }
+  if (-Not $QLogsWriterPassword) {
+    $QLogsWriterPassword = $SenseService
+  }
+  if (-Not $QLogsReaderPassword) {
+    $QLogsReaderPassword = $SenseService
+  }
+  if (-Not $QLogsHostname) {
+    $QLogsHostname = $DbHost
+  }
+  if (-Not $QlikAdmin) {
+    $QlikAdmin = $SenseService
+  }
 
   File QlikClusterRoot
   {
@@ -45,14 +64,20 @@ Configuration QlikCentral
       #ProductId = '{0c721ce8-57a8-4fef-9edb-a301370fad93}'
       Setup = $SetupPath
       Patch = $PatchPath
-      PsDscRunAsCredential = $SenseService
       ServiceCredential = $SenseService
       RootDir = "\\$ClusterShareHost\$ClusterShareName"
       DbSuperUserPassword = $DbSuperUserPassword
       DbCredential = $DbCredential
       CreateCluster = $true
       InstallLocalDb = $true
+      ConfigureDbListener = $true
       Hostname = $Hostname
+      ConfigureLogging = $ConfigureLogging
+      SetupLocalLoggingDb = $SetupLocalLoggingDb
+      QLogsWriterPassword = $QLogsWriterPassword
+      QLogsReaderPassword = $QLogsReaderPassword
+      QLogsHostname = $QLogsHostname
+      QLogsPort = $QLogsPort
       Ensure = 'Present'
       DependsOn = '[xSmbShare]QlikClusterShare'
   }
@@ -108,7 +133,8 @@ Configuration QlikCentral
 
   QlikConnect SenseCentral
   {
-    Username      = "$Hostname\vagrant"
+    Computername  = $Hostname
+    Username      = $QlikAdmin.UserName
     DependsOn     = "[xService]QPS"
   }
 
@@ -130,6 +156,35 @@ Configuration QlikCentral
     Name = 'Qlik Sense Root Admin'
     Roles = 'RootAdmin'
     Ensure = 'Present'
+    DependsOn    = "[QlikLicense]SiteLicense"
+  }
+
+  xFirewall QRD
+  {
+    Name                  = "QRD"
+    DisplayName           = "Qlik Sense Repository Database"
+    Group                 = "Qlik Sense"
+    Ensure                = "Present"
+    Action                = "Allow"
+    Enabled               = "True"
+    Profile               = ("Domain", "Private", "Public")
+    Direction             = "InBound"
+    LocalPort             = ("4432")
+    Protocol              = "TCP"
+  }
+
+  xFirewall QRS
+  {
+    Name                  = "QRS"
+    DisplayName           = "Qlik Sense Repository Service"
+    Group                 = "Qlik Sense"
+    Ensure                = "Present"
+    Action                = "Allow"
+    Enabled               = "True"
+    Profile               = ("Domain", "Private", "Public")
+    Direction             = "InBound"
+    LocalPort             = ("4242")
+    Protocol              = "TCP"
   }
 
   xFirewall QPS

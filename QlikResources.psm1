@@ -80,7 +80,12 @@ class QlikApp{
           Invoke-QlikPost /qrs/app/$($replace.id)/reload
           $task = Get-QlikReloadTask -filter "app.id eq $($replace.id)"
           Start-QlikTask -wait $task.id
-          Wait-QlikExecution -taskId $task.id
+          $result = Wait-QlikExecution -taskId $task.id
+          if ($result.status -ne 'FinishedSuccess')
+          {
+            Write-Error "Reload of app $($replace.id) failed with status $($result.status)"
+            return
+          }
         }
         Switch-QlikApp -id $replace.id -appId $item.id
         $this.configure($item)
@@ -246,6 +251,128 @@ class QlikApp{
     if (($this.Stream -ne $item.stream.name) -And ($this.Stream -ne "."))
     {
       return $false
+    }
+
+    return $true
+  }
+}
+
+[DscResource()]
+class QlikContentLibrary {
+  [DscProperty(Key)]
+  [string] $Name
+
+  [DscProperty()]
+  [hashtable] $CustomProperties
+
+  [DscProperty()]
+  [string[]] $Tags
+
+  [DscProperty(Mandatory)]
+  [Ensure] $Ensure
+
+  [void] Set()
+  {
+    $item = Get-QlikContentLibrary -raw -full -filter "name eq '$($this.Name)'"
+    $present = $item -ne $null
+
+    if ($this.Ensure -eq [Ensure]::Present)
+    {
+      $prop = ConfigurePropertiesAndTags($this)
+      if (-Not $present)
+      {
+        Write-Verbose "Creating Content Library '$($this.Name)'"
+        New-QlikContentLibrary -Name $this.Name @prop
+      }
+      else
+      {
+        Write-Verbose "Updating Content Library '$($item.id)'"
+        #Update-QlikContentLibrary -id $this.id @prop
+      }
+    }
+    else
+    {
+      if ($present)
+      {
+        Write-Verbose "Deleting Content Library '$($item.id)'"
+        Remove-QlikContentLibrary -id $this.id
+      }
+    }
+  }
+
+  [bool] Test()
+  {
+    $item = Get-QlikContentLibrary -raw -full -filter "name eq '$($this.Name)'"
+    $present = $item -ne $null
+
+    if ($this.Ensure -eq [Ensure]::Present)
+    {
+      if (-Not $present)
+      {
+        Write-Verbose "Content Library '$($this.Name)' not found but should be present"
+        return $false
+      }
+      else
+      {
+        return $this.hasProperties($item)
+      }
+    }
+    else
+    {
+      if ($present)
+      {
+        Write-Verbose "Content Library '$($item.id)' should be absent"
+        return $false
+      }
+    }
+    return $true
+  }
+
+  [QlikContentLibrary] Get()
+  {
+    $item = Get-QlikContentLibrary -raw -full -filter "name eq '$($this.Name)'"
+    if ($item -ne $null)
+    {
+      $this.Ensure = [Ensure]::Present
+    }
+    else
+    {
+      $this.Ensure = [Ensure]::Absent
+    }
+
+    return $this
+  }
+
+  [bool] hasProperties($item)
+  {
+    if( !(CompareProperties $this $item @( 'Name' ) ) )
+    {
+      return $false
+    }
+
+    if ($this.Tags)
+    {
+      foreach ($tag in $this.Tags)
+      {
+        if (-Not ($item.tags.name -contains $tag))
+        {
+          Write-Verbose "Not tagged with $tag"
+          return $false
+        }
+      }
+    }
+
+    if ($this.CustomProperties)
+    {
+      foreach ($prop in $this.CustomProperties.Keys)
+      {
+        $cp = $item.customProperties | where {$_.definition.name -eq $prop}
+        if (-Not (($cp) -And ($cp.value -eq $this.CustomProperties.$prop)))
+        {
+          Write-Verbose "Property $prop should have value $($this.CustomProperties.$prop) but instead has value $($cp.value)"
+          return $false
+        }
+      }
     }
 
     return $true
@@ -1384,6 +1511,9 @@ class QlikVirtualProxy{
   [ValidateSet("ticket","static","dynamic","saml","jwt", IgnoreCase=$false)]
   [string]$authenticationMethod
 
+  [DscProperty()]
+  [string]$WindowsAuthenticationEnabledDevicePattern
+
   [DscProperty(Mandatory=$false)]
   [string]$samlMetadataIdP
 
@@ -1422,6 +1552,7 @@ class QlikVirtualProxy{
       If( $this.websocketCrossOriginWhiteList ) { $params.Add("websocketCrossOriginWhiteList", $this.websocketCrossOriginWhiteList) }
       If( $this.authenticationModuleRedirectUri ) { $params.Add("authenticationModuleRedirectUri", $this.authenticationModuleRedirectUri) }
       If( $this.authenticationMethod ) { $params.Add("authenticationMethod", $this.authenticationMethod) }
+      If( $this.WindowsAuthenticationEnabledDevicePattern ) { $params.Add("windowsAuthenticationEnabledDevicePattern", $this.WindowsAuthenticationEnabledDevicePattern) }
       If( $this.samlMetadataIdP ) { $params.Add("samlMetadataIdP", $this.samlMetadataIdP) }
       If( $this.samlHostUri ) { $params.Add("samlHostUri", $this.samlHostUri) }
       If( $this.samlEntityId ) { $params.Add("samlEntityId", $this.samlEntityId) }
@@ -1514,7 +1645,7 @@ class QlikVirtualProxy{
   [bool] hasProperties($item)
   {
     if( !(CompareProperties $this $item @( 'Description', 'SessionCookieHeaderName', 'authenticationModuleRedirectUri',
-        'samlMetadataIdP', 'samlHostUri', 'samlEntityId', 'samlAttributeUserId', 'samlAttributeUserDirectory', 'sessionInactivityTimeout' ) ) )
+        'samlMetadataIdP', 'samlHostUri', 'samlEntityId', 'samlAttributeUserId', 'samlAttributeUserDirectory', 'sessionInactivityTimeout', 'WindowsAuthenticationEnabledDevicePattern' ) ) )
     {
       return $false
     }
@@ -2155,7 +2286,7 @@ class QlikPackage {
     [DscProperty(Mandatory)]
     [PSCredential]$ServiceCredential
 
-    [DscProperty(Mandatory)]
+    [DscProperty()]
     [PSCredential]$DbSuperUserPassword
 
     [DscProperty()]
@@ -2170,7 +2301,7 @@ class QlikPackage {
     [DscProperty()]
     [int]$DbPort = 4432
 
-    [DscProperty(Mandatory)]
+    [DscProperty()]
     [string]$RootDir
 
     [DscProperty()]
@@ -2201,6 +2332,27 @@ class QlikPackage {
     [string]$IpRange = "0.0.0.0/0"
 
     [DscProperty()]
+    [bool]$ConfigureLogging = $true
+
+    [DscProperty()]
+    [bool]$SetupLocalLoggingDb
+
+    [DscProperty()]
+    [PSCredential]$QLogsWriterPassword
+
+    [DscProperty()]
+    [PSCredential]$QLogsReaderPassword
+
+    [DscProperty()]
+    [string]$QLogsHostname = "localhost"
+
+    [DscProperty()]
+    [int]$QLogsPort = 4432
+
+    [DscProperty()]
+    [bool]$JoinCluster = $false
+
+    [DscProperty()]
     [Int]$ExitCode=0
 
     [void] Set() {
@@ -2215,7 +2367,7 @@ class QlikPackage {
                 if($this.ServiceCredential) {
                     [String]$parsedSetupParams += " userpassword=`"$([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($this.ServiceCredential.Password)))`""
                 }
-                [String]$parsedSetupParams += " dbpassword=`"$([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($this.DbSuperUserPassword.Password)))`""
+                if($this.dbpassword) { [String]$parsedSetupParams += " dbpassword=`"$([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($this.DbSuperUserPassword.Password)))`"" }
             } else {
                 if($this.Rimnodetype) {
                     [String]$parsedSetupParams += " rimnodetype=$($this.Rimnodetype)"
@@ -2224,7 +2376,7 @@ class QlikPackage {
                     }
                 }
                 if($this.Rimnode) { [String]$parsedSetupParams += " rimnode=1" }
-                [String]$parsedSetupParams += " dbpassword=`"$([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($this.DbSuperUserPassword.Password)))`""
+                if($this.dbpassword) { [String]$parsedSetupParams += " dbpassword=`"$([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($this.DbSuperUserPassword.Password)))`"" }
                 if($this.Hostname) { [String]$parsedSetupParams += " hostname=`"$($this.Hostname)`"" }
                 if($this.ServiceCredential) { [String]$parsedSetupParams += " userwithdomain=`"$($this.ServiceCredential.Username)`" userpassword=`"$([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($this.ServiceCredential.Password)))`"" }
 
@@ -2234,6 +2386,20 @@ class QlikPackage {
                   if(!$this.ArchivedLogsDir) { $this.ArchivedLogsDir = "$($this.RootDir)\ArchivedLogs" }
                   if(!$this.AppsDir) { $this.AppsDir = "$($this.RootDir)\Apps" }
                 }
+                $spc_cluster = @"
+  <CreateCluster>$($this.CreateCluster.ToString().ToLower())</CreateCluster>
+  <RootDir>$($this.RootDir)</RootDir>
+  <StaticContentRootDir>$($this.StaticContentRootDir)</StaticContentRootDir>
+  <CustomDataRootDir>$($this.CustomDataRootDir)</CustomDataRootDir>
+  <ArchivedLogsDir>$($this.ArchivedLogsDir)</ArchivedLogsDir>
+  <AppsDir>$($this.AppsDir)</AppsDir>
+"@
+                $spc_db = @"
+  <InstallLocalDb>$($this.InstallLocalDb.ToString().ToLower())</InstallLocalDb>
+  <ConfigureDbListener>$("$($this.ConfigureDbListener)".ToLower())</ConfigureDbListener>
+  <ListenAddresses>$($this.ListenAddresses)</ListenAddresses>
+  <IpRange>$($this.IpRange)</IpRange>
+"@
                 $spc = @"
 <?xml version="1.0"?>
 <SharedPersistenceConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
@@ -2241,16 +2407,15 @@ class QlikPackage {
   <DbUserPassword>$([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($this.DbCredential.Password)))</DbUserPassword>
   <DbHost>$($this.DbHost)</DbHost>
   <DbPort>$($this.DbPort)</DbPort>
-  <RootDir>$($this.RootDir)</RootDir>
-  <StaticContentRootDir>$($this.StaticContentRootDir)</StaticContentRootDir>
-  <CustomDataRootDir>$($this.CustomDataRootDir)</CustomDataRootDir>
-  <ArchivedLogsDir>$($this.ArchivedLogsDir)</ArchivedLogsDir>
-  <AppsDir>$($this.AppsDir)</AppsDir>
-  <CreateCluster>$("$($this.CreateCluster)".ToLower())</CreateCluster>
-  <InstallLocalDb>$("$($this.InstallLocalDb)".ToLower())</InstallLocalDb>
-  <ConfigureDbListener>$("$($this.ConfigureDbListener)".ToLower())</ConfigureDbListener>
-  <ListenAddresses>$($this.ListenAddresses)</ListenAddresses>
-  <IpRange>$($this.IpRange)</IpRange>
+$(if ($this.CreateCluster) { $spc_cluster })
+$(if ($this.InstallLocalDb) { $spc_db })
+  <ConfigureLogging>$($this.ConfigureLogging.ToString().ToLower())</ConfigureLogging>
+  <SetupLocalLoggingDb>$($this.SetupLocalLoggingDb.ToString().ToLower())</SetupLocalLoggingDb>
+  <QLogsWriterPassword>$([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($this.QLogsWriterPassword.Password)))</QLogsWriterPassword>
+  <QLogsReaderPassword>$([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($this.QLogsReaderPassword.Password)))</QLogsReaderPassword>
+  <QLogsHostname>$($this.QLogsHostname)</QLogsHostname>
+  <QLogsPort>$($this.QLogsPort)</QLogsPort>
+  <JoinCluster>$($this.JoinCluster.ToString().ToLower())</JoinCluster>
 </SharedPersistenceConfiguration>
 "@
                 $spc | Out-File -FilePath "$env:temp\spc.cfg"
