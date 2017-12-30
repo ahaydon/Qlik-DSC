@@ -1004,24 +1004,39 @@ class QlikNode{
       }
     }
 
-    If($item.EngineEnabled -ne $this.Engine) {
-      Write-Verbose "Test-HasProperties: Engine property value - $($item.EngineEnabled) does not match desired state - $($this.Engine)"
-      return $false
+    If ($this.Engine) {
+        If(!$item.EngineEnabled) {
+          Write-Verbose "Test-HasProperties: Engine property value - $($item.EngineEnabled) does not match desired state - $($this.Engine)"
+          return $false
+        }
     }
 
-    If($item.ProxyEnabled -ne $this.Proxy) {
-      Write-Verbose "Test-HasProperties: Proxy property value - $($item.ProxyEnabled) does not match desired state - $($this.Proxy)"
-      return $false
+    If ($this.Proxy) {
+        If(!$item.ProxyEnabled) {
+          Write-Verbose "Test-HasProperties: Proxy property value - $($item.ProxyEnabled) does not match desired state - $($this.Proxy)"
+          return $false
+        }
     }
 
-    If($item.SchedulerEnabled -ne $this.Scheduler) {
-      Write-Verbose "Test-HasProperties: Scheduler property value - $($item.SchedulerEnabled) does not match desired state - $($this.Scheduler)"
-      return $false
+    If ($this.Scheduler) {
+        If(!$item.SchedulerEnabled) {
+          Write-Verbose "Test-HasProperties: Scheduler property value - $($item.SchedulerEnabled) does not match desired state - $($this.Scheduler)"
+          return $false
+        }
     }
 
-    If($item.PrintingEnabled -ne $this.Printing) {
-      Write-Verbose "Test-HasProperties: Printing property value - $($item.PrintingEnabled) does not match desired state - $($this.Printing)"
-      return $false
+    If ($this.Printing) {
+        If(!$item.PrintingEnabled) {
+          Write-Verbose "Test-HasProperties: Printing property value - $($item.PrintingEnabled) does not match desired state - $($this.Printing)"
+          return $false
+        }
+    }
+
+    If ($this.Failover) {
+        If(!$item.FailoverCandidate) {
+          Write-Verbose "Test-HasProperties: Failover property value - $($item.FailoverCandidate) does not match desired state - $($this.Failover)"
+          return $false
+        }
     }
 
     return $true
@@ -1508,6 +1523,9 @@ class QlikVirtualProxy{
   [string[]]$proxy
 
   [DscProperty(Mandatory=$false)]
+  [string]$proxyFilter
+
+  [DscProperty(Mandatory=$false)]
   [ValidateSet("ticket","static","dynamic","saml","jwt", IgnoreCase=$false)]
   [string]$authenticationMethod
 
@@ -1542,13 +1560,15 @@ class QlikVirtualProxy{
 
     if($this.ensure -eq [Ensure]::Present)
     {
-      $engines = Get-QlikNode -raw -filter $this.loadBalancingServerNodes | foreach { $_.id } | ? { $_ }
       $params = @{
         Prefix = $this.Prefix
         Description = $this.Description
         SessionCookieHeaderName = $this.SessionCookieHeaderName
       }
-      If( $engines ) { $params.Add("loadBalancingServerNodes", $engines) }
+      If( $this.loadBalancingServerNodes ) {
+        $engines = Get-QlikNode -raw -filter $this.loadBalancingServerNodes | foreach { $_.id } | ? { $_ }
+        $params.Add("loadBalancingServerNodes", $engines)
+      }
       If( $this.websocketCrossOriginWhiteList ) { $params.Add("websocketCrossOriginWhiteList", $this.websocketCrossOriginWhiteList) }
       If( $this.authenticationModuleRedirectUri ) { $params.Add("authenticationModuleRedirectUri", $this.authenticationModuleRedirectUri) }
       If( $this.authenticationMethod ) { $params.Add("authenticationMethod", $this.authenticationMethod) }
@@ -1577,6 +1597,12 @@ class QlikVirtualProxy{
         $this.proxy | foreach {
           $qp = Get-QlikProxy -raw -filter "serverNodeConfiguration.hostName eq '$_'"
           Add-QlikProxy $qp.id $item.id
+        }
+      }
+      if( $this.proxyFilter )
+      {
+        Get-QlikProxy -raw -filter $this.proxyFilter | foreach {
+            Add-QlikProxy $_.id $item.id
         }
       }
     }
@@ -1667,7 +1693,7 @@ class QlikVirtualProxy{
     if($this.loadBalancingServerNodes) {
       $nodes = Get-QlikNode -filter $this.loadBalancingServerNodes | foreach { $_.id } | ? { $_ }
       if(@($nodes).Count -ne @($item.loadBalancingServerNodes).Count) {
-        Write-Verbose "Test-HasProperties: loadBalancingServerNodes property count - $(@($item.loadBalancingServerNodes).Count) does not match desired state - $(@($this.loadBalancingServerNodes).Count)"
+        Write-Verbose "Test-HasProperties: loadBalancingServerNodes property count - $(@($item.loadBalancingServerNodes).Count) does not match desired state - $(@($nodes).Count)"
         return $false
       } else {
         foreach($value in $item.loadBalancingServerNodes) {
@@ -1702,6 +1728,25 @@ class QlikVirtualProxy{
           Write-Verbose "Test-HasProperties: $proxy not linked"
           return $false
         }
+      }
+    }
+
+    if ($this.proxyFilter) {
+      $globalMatch = $true
+      Get-QlikProxy -raw -full -filter $this.proxyFilter | foreach {
+        $match  = $false
+        $_.settings.virtualProxies | foreach {
+            If($_.id -eq $item.id) {
+                $match = $true
+            }
+        }
+        If(!$match) {
+            Write-Verbose "Test-HasProperties: $_ not linked"
+            $globalMatch = $false
+        }
+      }
+      If (!$globalMatch) {
+        return $false
       }
     }
 
@@ -1886,6 +1931,12 @@ class QlikProxy {
     [DscProperty()]
     [String]$SslBrowserCertificateThumbprint
 
+    [DscProperty()]
+    [String[]]$CustomProperties
+
+    [DscProperty()]
+    [String[]]$VirtualProxies
+
     [Void] Set () {
         Write-Verbose "Get Qlik Proxy: $($this.Node)"
         $item = Get-QlikProxy -Full -Filter "serverNodeConfiguration.hostName eq '$($this.Node)'"
@@ -1898,6 +1949,8 @@ class QlikProxy {
             if($this.KerberosAuthentication) { $engparams.Add("kerberosAuthentication", $this.KerberosAuthentication) }
             if($this.UnencryptedAuthenticationListenPort) { $engparams.Add("unencryptedAuthenticationListenPort", $this.UnencryptedAuthenticationListenPort) }
             if($this.SslBrowserCertificateThumbprint) { $engparams.Add("sslBrowserCertificateThumbprint", $this.SslBrowserCertificateThumbprint) }
+            if($this.CustomProperties) { $engparams.Add("customProperties", $this.CustomProperties) }
+            if($null -ne $this.VirtualProxies) { $engparams.Add("virtualProxies", $this.VirtualProxies) }
             Write-Verbose "Update Qlik Proxy: $($this.Node)"
             Update-QlikProxy @engparams
         } else {
@@ -1933,6 +1986,7 @@ class QlikProxy {
           $this.KerberosAuthentication = $item.settings.kerberosAuthentication
           $this.UnencryptedAuthenticationListenPort = $item.settings.unencryptedAuthenticationListenPort
           $this.SslBrowserCertificateThumbprint = $item.settings.sslBrowserCertificateThumbprint
+          $this.VirtualProxies = $item.settings.virtualProxies
           $this.Ensure = [Ensure]::Present
         } else {
             $this.Ensure = [Ensure]::Absent
@@ -1982,6 +2036,49 @@ class QlikProxy {
             if($item.settings.sslBrowserCertificateThumbprint -ne $this.SslBrowserCertificateThumbprint) {
                 Write-Verbose "Test-HasProperties: Standard reload property value - $($item.settings.sslBrowserCertificateThumbprint) does not match desired state - $($this.SslBrowserCertificateThumbprint)"
                 $desiredState = $false
+            }
+        }
+        if($this.CustomProperties) {
+            $propList = $item.customProperties | foreach { "$($_.definition.name)=$($_.value)" }
+            if(@($propList).Count -ne @($this.CustomProperties).Count) {
+                Write-Verbose "Test-HasProperties: custom properties count differ - $(@($propList).Count) does not match desired state - $(@($this.CustomProperties).Count)"
+                $desiredState = $false
+            } else {
+                $propList | foreach {
+                    If (!($this.CustomProperties -contains $_)) {
+                        Write-Verbose "Test-HasProperties: custom property - '$_' does not match desired state"
+                        $desiredState = $false
+                    }
+                }
+            }
+        }
+        if($null -ne $this.VirtualProxies) {
+            $set = New-Object System.Collections.Generic.HashSet[string]
+            $vProxList = $item.settings.virtualProxies | foreach {
+              If ($_.defaultVirtualProxy) {
+                $res = $set.Add($_.id)
+              }
+              $_.id
+            }
+            $this.VirtualProxies | foreach {
+              If ($_ -ne '') {
+                $eid = Get-QlikVirtualProxy -filter "prefix eq '$_'"
+                  If( $eid )
+                  {
+                    $res = $set.Add($eid.id)
+                  }
+              }
+            }
+            if(@($vProxList).Count -ne $set.Count) {
+                Write-Verbose "Test-HasProperties: custom properties count differ - $(@($vProxList).Count) does not match desired state - $($set.Count)"
+                $desiredState = $false
+            } else {
+                $vProxList | foreach {
+                    If (!($set -contains $_)) {
+                        Write-Verbose "Test-HasProperties: virtual proxy - '$_' does not match desired state"
+                        $desiredState = $false
+                    }
+                }
             }
         }
         return $desiredState
