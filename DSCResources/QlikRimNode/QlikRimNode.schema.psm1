@@ -8,7 +8,7 @@ Configuration QlikRimNode
     [string] $PatchPath,
     [string] $DbHost,
     [PSCredential] $DbCredential,
-    [string] $Hostname = $(hostname),
+    [string] $Hostname = ([System.Net.Dns]::GetHostEntry('localhost')).hostname,
     [bool]$ConfigureLogging = $true,
     [PSCredential]$QLogsWriterPassword,
     [PSCredential]$QLogsReaderPassword,

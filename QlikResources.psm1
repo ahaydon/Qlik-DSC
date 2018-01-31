@@ -789,7 +789,7 @@ class QlikLicense{
   [DscProperty(Mandatory)]
   [string]$Organization
 
-  [DscProperty(Mandatory)]
+  [DscProperty()]
   [string]$Lef
 
   [DscProperty(Mandatory)]
