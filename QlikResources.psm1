@@ -2360,7 +2360,8 @@ class QlikPackage {
             Write-Verbose "Install $($this.Name)"
             [String]$parsedSetupParams = "-silent"
             if($this.LogFile) { [String]$parsedSetupParams += " -log `"$($this.LogFile)`"" }
-            if($this.SkipStartServices) { [String]$parsedSetupParams += " skipstartservices=1" }
+            # if applying a patch after install we should not start the services
+            if($this.SkipStartServices -Or $this.Patch) { [String]$parsedSetupParams += " skipstartservices=1" }
             if($this.InstallDir) { [String]$parsedSetupParams += " installdir=`"$($this.InstallDir)`"" }
             if($this.DesktopShortcut) { [String]$parsedSetupParams += " desktopshortcut=1" }
             if(Get-ItemProperty HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object { $_.DisplayName -like 'Qlik Sense*' }) {

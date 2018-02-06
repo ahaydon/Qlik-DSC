@@ -4,7 +4,7 @@
 RootModule = 'QlikResources.psm1'
 
 # Version number of this module.
-ModuleVersion = '1.5'
+ModuleVersion = '1.5.3'
 
 # ID used to uniquely identify this module
 GUID = '81624038-5e71-40f8-8905-b1a87afe22d7'
@@ -40,7 +40,7 @@ PowerShellVersion = '5.0'
 # ProcessorArchitecture = ''
 
 # Modules that must be imported into the global environment prior to importing this module
-# RequiredModules = @()
+RequiredModules = @('Qlik-Cli', 'xNetworking', 'xPSDesiredStateConfiguration', 'xSmbShare')
 
 # Assemblies that must be loaded prior to importing this module
 # RequiredAssemblies = @()
