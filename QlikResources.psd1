@@ -4,7 +4,7 @@
 RootModule = 'QlikResources.psm1'
 
 # Version number of this module.
-ModuleVersion = '1.5.3'
+ModuleVersion = '1.6'
 
 # ID used to uniquely identify this module
 GUID = '81624038-5e71-40f8-8905-b1a87afe22d7'

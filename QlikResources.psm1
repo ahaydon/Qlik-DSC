@@ -492,14 +492,19 @@ class QlikConnect{
 
   [void] Set()
   {
-    $cert = gci $this.Certificate
+    $cert = $null
+    if( $this.Certificate -And ($this.Certificate.SubString(0, 5) -eq 'cert:' )) {
+      $cert = gci $this.Certificate
+    } elseif( $this.Certificate ) {
+      $cert = Get-PfxCertificate $this.Certificate
+    }
     $params = @{ Username=$this.Username }
     if( $this.Computername ) { $params.Add( "Computername", $this.Computername ) }
     if( $this.Certificate ) { $params.Add( "Certificate", $cert ) }
     if( $this.TrustAllCerts ) { $params.Add( "TrustAllCerts", $true ) }
     #Connect-Qlik @params -TrustAllCerts
     $err = $null
-    for ($i = 1; $i -lt $this.MaxRetries; $i++) {
+    for ($i = 1; $i -le $this.MaxRetries; $i++) {
       Write-Progress "Connecting to Qlik, attempt $i"
       try {
         if (Connect-Qlik -ErrorAction Ignore -ErrorVariable err @params) {
@@ -1486,10 +1491,10 @@ class QlikTask{
 [DscResource()]
 class QlikVirtualProxy{
 
-  [DscProperty(Key)]
+  [DscProperty(Mandatory)]
   [string]$Prefix
 
-  [DscProperty(Mandatory)]
+  [DscProperty(Key)]
   [string]$Description
 
   [DscProperty(Mandatory)]
@@ -1537,17 +1542,17 @@ class QlikVirtualProxy{
 
   [void] Set()
   {
-    $item = $(Get-QlikVirtualProxy -raw -filter "Prefix eq '$($this.Prefix)'")
+    $item = $(Get-QlikVirtualProxy -raw -filter "Description eq '$($this.Description)'")
     $present = $item -ne $null
 
     if($this.ensure -eq [Ensure]::Present)
     {
       $engines = Get-QlikNode -raw -filter $this.loadBalancingServerNodes | foreach { $_.id } | ? { $_ }
       $params = @{
-        Prefix = $this.Prefix
         Description = $this.Description
         SessionCookieHeaderName = $this.SessionCookieHeaderName
       }
+      If( $this.Prefix.Trim('/') ) { $params.Add("prefix", $this.Prefix.Trim('/')) }
       If( $engines ) { $params.Add("loadBalancingServerNodes", $engines) }
       If( $this.websocketCrossOriginWhiteList ) { $params.Add("websocketCrossOriginWhiteList", $this.websocketCrossOriginWhiteList) }
       If( $this.authenticationModuleRedirectUri ) { $params.Add("authenticationModuleRedirectUri", $this.authenticationModuleRedirectUri) }
@@ -1592,7 +1597,7 @@ class QlikVirtualProxy{
 
   [bool] Test()
   {
-    $item = $(Get-QlikVirtualProxy -raw -filter "Prefix eq '$($this.Prefix)'")
+    $item = Get-QlikVirtualProxy -raw -filter "Description eq '$($this.Description)'"
     $present = $item -ne $null
 
     if($this.Ensure -eq [Ensure]::Present)
@@ -1616,22 +1621,22 @@ class QlikVirtualProxy{
 
   [QlikVirtualProxy] Get()
   {
-    $present = $(Get-QlikVirtualProxy -raw -filter "Prefix eq '$($this.Prefix)'") -ne $null
+    $item = $(Get-QlikVirtualProxy -raw -filter "Description eq '$($this.Description)'")
+    $present = $item -ne $null
     if ($present)
     {
-      $qvp = Get-QlikVirtualProxy -raw -filter "Prefix eq '$($this.Prefix)'"
-      $this.Description = $qvp.Description
-      $this.SessionCookieHeaderName = $qvp.SessionCookieHeaderName
-      $this.authenticationModuleRedirectUri = $qvp.authenticationModuleRedirectUri
-      $this.loadBalancingServerNodes = $qvp.loadBalancingServerNodes
-      $this.websocketCrossOriginWhiteList = $qvp.websocketCrossOriginWhiteList
-      $this.authenticationMethod = $qvp.authenticationMethod
-      $this.samlMetadataIdP = $qvp.samlMetadataIdP
-      $this.samlHostUri = $qvp.samlHostUri
-      $this.samlEntityId = $qvp.samlEntityId
-      $this.samlAttributeUserId = $qvp.samlAttributeUserId
-      $this.samlAttributeUserDirectory = $qvp.samlAttributeUserDirectory
-      $this.sessionInactivityTimeout = $qvp.sessionInactivityTimeout
+      $this.Description = $item.Description
+      $this.SessionCookieHeaderName = $item.SessionCookieHeaderName
+      $this.authenticationModuleRedirectUri = $item.authenticationModuleRedirectUri
+      $this.loadBalancingServerNodes = $item.loadBalancingServerNodes
+      $this.websocketCrossOriginWhiteList = $item.websocketCrossOriginWhiteList
+      $this.authenticationMethod = $item.authenticationMethod
+      $this.samlMetadataIdP = $item.samlMetadataIdP
+      $this.samlHostUri = $item.samlHostUri
+      $this.samlEntityId = $item.samlEntityId
+      $this.samlAttributeUserId = $item.samlAttributeUserId
+      $this.samlAttributeUserDirectory = $item.samlAttributeUserDirectory
+      $this.sessionInactivityTimeout = $item.sessionInactivityTimeout
       $this.Ensure = [Ensure]::Present
     }
     else
@@ -1644,10 +1649,15 @@ class QlikVirtualProxy{
 
   [bool] hasProperties($item)
   {
-    if( !(CompareProperties $this $item @( 'Description', 'SessionCookieHeaderName', 'authenticationModuleRedirectUri',
+    if( !(CompareProperties $this $item @( 'SessionCookieHeaderName', 'authenticationModuleRedirectUri',
         'samlMetadataIdP', 'samlHostUri', 'samlEntityId', 'samlAttributeUserId', 'samlAttributeUserDirectory', 'sessionInactivityTimeout', 'WindowsAuthenticationEnabledDevicePattern' ) ) )
     {
       return $false
+    }
+
+    if($this.Prefix -And ($this.Prefix.Trim('/') -ne $item.prefix)) {
+        Write-Verbose "Test-HasProperties: prefix - $($item.prefix) does not match desired state - $($this.Prefix.Trim('/'))"
+        return $false
     }
 
     if($this.authenticationMethod) {
@@ -1660,7 +1670,7 @@ class QlikVirtualProxy{
         }
         If($authenticationMethodCode -ne $item.authenticationMethod) {
             Write-Verbose "Test-HasProperties: authenticationMethod - $($item.authenticationMethod) does not match desired state - $authenticationMethodCode"
-            return $false;
+            return $false
         }
     }
 
@@ -1738,6 +1748,10 @@ class QlikEngine {
     [Int]$CpuThrottle
 
     [DscProperty()]
+    [ValidateRange(0,256)]
+    [Int]$CoresToAllocate
+
+    [DscProperty()]
     [Bool]$AllowDataLineage
 
     [DscProperty()]
@@ -1754,6 +1768,7 @@ class QlikEngine {
             if($this.MaxMemUsage) { $engparams.Add("workingSetSizeHiPct", $this.MaxMemUsage) }
             if($this.MemUsageMode) { $engparams.Add("workingSetSizeMode", $this.MemUsageMode) }
             if($this.CpuThrottle) { $engparams.Add("cpuThrottlePercentage", $this.CpuThrottle) }
+            if($this.CoresToAllocate) { $engparams.Add("coresToAllocate", $this.CoresToAllocate) }
             if($this.AllowDataLineage) { $engparams.Add("allowDataLineage", $this.AllowDataLineage) }
             if($this.StandardReload) { $engparams.Add("standardReload", $this.StandardReload) }
             Write-Verbose "Update Qlik Engine: $($this.Node)"
@@ -1847,11 +1862,11 @@ class QlikEngine {
                 $desiredState = $false
             }
         }
-        if($item.settings.allowDataLineage -ne $this.AllowDataLineage) {
+        if($PSBoundParameters.ContainsKey('AllowDataLineage') -And ($item.settings.allowDataLineage -ne $this.AllowDataLineage)) {
             Write-Verbose "Test-HasProperties: Allow data lineage property value - $($item.settings.allowDataLineage) does not match desired state - $($this.AllowDataLineage)"
             $desiredState = $false
         }
-        if($item.settings.standardReload -ne $this.StandardReload) {
+        if($PSBoundParameters.ContainsKey('StandardReload') -And ($item.settings.standardReload -ne $this.StandardReload)) {
             Write-Verbose "Test-HasProperties: Standard reload property value - $($item.settings.standardReload) does not match desired state - $($this.StandardReload)"
             $desiredState = $false
         }

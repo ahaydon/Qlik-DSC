@@ -6,7 +6,9 @@ Configuration QlikRimNode
     [string] $ProductName,
     [string] $SetupPath,
     [string] $PatchPath,
+    [string] $InstallDir,
     [string] $DbHost,
+    [int]$DbPort,
     [PSCredential] $DbCredential,
     [string] $Hostname = ([System.Net.Dns]::GetHostEntry('localhost')).hostname,
     [bool]$ConfigureLogging = $true,
@@ -28,10 +30,10 @@ Configuration QlikRimNode
     $DbCredential = New-Object System.Management.Automation.PSCredential('qliksenserepository', $SenseService.GetNetworkCredential().SecurePassword)
   }
   if (-Not $QLogsWriterPassword) {
-    $QLogsWriterPassword = $SenseService
+    $QLogsWriterPassword = $DbCredential
   }
   if (-Not $QLogsReaderPassword) {
-    $QLogsReaderPassword = $SenseService
+    $QLogsReaderPassword = $DbCredential
   }
   if (-Not $DbHost) {
     $DbHost = $CentralNode
@@ -48,10 +50,12 @@ Configuration QlikRimNode
       Name = $ProductName
       Setup = $SetupPath
       Patch = $PatchPath
+      InstallDir = $InstallDir
       #PsDscRunAsCredential = $SenseService
       ServiceCredential = $SenseService
       DbCredential = $DbCredential
       DbHost = $DbHost
+      DbPort = $DbPort
       Hostname = $Hostname
       JoinCluster = $true
       ConfigureLogging = $ConfigureLogging
@@ -140,10 +144,10 @@ Configuration QlikRimNode
     DependsOn     = "[xService]QPS"
   }
 
-  QlikNode $(hostname)
+  QlikNode $hostname
   {
     Ensure    = "Present"
-    HostName  = $(hostname)
+    HostName  = $hostname
     Engine    = $Engine
     Printing  = $Printing
     Proxy     = $Proxy
