@@ -8,14 +8,14 @@ Configuration QlikRimNode
     [string] $PatchPath,
     [string] $InstallDir,
     [string] $DbHost,
-    [int]$DbPort,
+    [int]$DbPort = 4432,
     [PSCredential] $DbCredential,
     [string] $Hostname = ([System.Net.Dns]::GetHostEntry('localhost')).hostname,
     [bool]$ConfigureLogging = $true,
     [PSCredential]$QLogsWriterPassword,
     [PSCredential]$QLogsReaderPassword,
     [string]$QLogsHostname,
-    [int]$QLogsPort = 4432,
+    [int]$QLogsPort,
     [bool] $Engine,
     [bool] $Printing,
     [bool] $Proxy,
@@ -43,6 +43,9 @@ Configuration QlikRimNode
   }
   if (-Not $QlikAdmin) {
     $QlikAdmin = $SenseService
+  }
+  if (-Not $QLogsPort) {
+    $QLogsPort = $DbPort
   }
 
   QlikPackage Sense_Setup

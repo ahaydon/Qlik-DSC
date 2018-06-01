@@ -938,7 +938,7 @@ class QlikNode{
     }
     else
     {
-      #Remove-QlikNode $this.id
+      Remove-QlikNode $item.id
     }
   }
 
@@ -947,15 +947,23 @@ class QlikNode{
     $item = Get-QlikNode -raw -full -filter "hostName eq '$($this.HostName)'"
     $present = $item -ne $null
 
-    if($present) {
-      if($this.hasProperties($item))
-      {
-        return $true
+    if($this.ensure -eq [Ensure]::Present) {
+      if($present) {
+        if($this.hasProperties($item))
+        {
+          return $true
+        } else {
+          return $false
+        }
       } else {
         return $false
       }
     } else {
-      return $false
+      if($present) {
+        return $false
+      } else {
+        return $true
+      }
     }
   }
 
@@ -1535,6 +1543,9 @@ class QlikVirtualProxy{
   [string]$samlAttributeUserDirectory
 
   [DscProperty(Mandatory=$false)]
+  [string]$samlMetadataExportPath
+
+  [DscProperty(Mandatory=$false)]
   [Int]$sessionInactivityTimeout
 
   [DscProperty(Mandatory)]
@@ -1580,8 +1591,17 @@ class QlikVirtualProxy{
       if( $this.proxy )
       {
         $this.proxy | foreach {
-          $qp = Get-QlikProxy -raw -filter "serverNodeConfiguration.hostName eq '$_'"
-          Add-QlikProxy $qp.id $item.id
+          $qp = Get-QlikProxy -raw -full -filter "serverNodeConfiguration.hostName eq '$_'"
+          $existing = $qp.settings.virtualProxies.id -join ', '
+          Write-Verbose "Existing linked virtual proxies for $_`: $existing"
+          Write-Verbose "Virtual proxy ID: $($item.id)"
+          if( $qp.settings.virtualProxies.id -notcontains $item.id ) {
+            Add-QlikProxy $qp.id $item.id
+          }
+        }
+        if( $this.samlMetadataExportPath )
+        {
+          Export-QlikMetadata -id $item.id -filename $this.samlMetadataExportPath
         }
       }
     }
@@ -1605,7 +1625,11 @@ class QlikVirtualProxy{
       if($present) {
         if($this.hasProperties($item))
         {
-          return $true
+          if(Test-Path $this.samlMetadataExportPath) {
+            return $true
+          } else {
+            return $false
+          }
         } else {
           return $false
         }
