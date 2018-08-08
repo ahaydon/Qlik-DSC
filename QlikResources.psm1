@@ -1251,14 +1251,14 @@ class QlikScheduler{
         Write-Verbose "Test-HasProperties: SchedulerServiceType property value - $($item.settings.SchedulerServiceType) does not match desired state - $($sched_type)"
         return $false
       }
-      if($item.settings.maxConcurrentEngines -ne $sched_type) {
-        Write-Verbose "Test-HasProperties: MaxConcurrentEngines property value - $($item.settings.maxConcurrentEngines) does not match desired state - $($this.MaxConcurrentEngines)"
-        return $false
-      }
-      if($item.settings.EngineTimeout -ne $sched_type) {
-        Write-Verbose "Test-HasProperties: EngineTimeout property value - $($item.settings.EngineTimeout) does not match desired state - $($this.EngineTimeout)"
-        return $false
-      }
+    }
+    if($item.settings.maxConcurrentEngines -ne $this.MaxConcurrentEngines) {
+      Write-Verbose "Test-HasProperties: MaxConcurrentEngines property value - $($item.settings.maxConcurrentEngines) does not match desired state - $($this.MaxConcurrentEngines)"
+      return $false
+    }
+    if($item.settings.EngineTimeout -ne $this.EngineTimeout) {
+      Write-Verbose "Test-HasProperties: EngineTimeout property value - $($item.settings.EngineTimeout) does not match desired state - $($this.EngineTimeout)"
+      return $false
     }
 
     return $true
@@ -1601,7 +1601,17 @@ class QlikVirtualProxy{
         }
         if( $this.samlMetadataExportPath )
         {
-          Export-QlikMetadata -id $item.id -filename $this.samlMetadataExportPath
+          Try {
+            Export-QlikMetadata -id $item.id -filename $this.samlMetadataExportPath -ErrorAction SilentlyContinue -ErrorVariable err
+          } Catch {
+            if ($_.exception.response.statuscode -eq 'NotFound') {
+              Start-Sleep -Seconds 10
+              Export-QlikMetadata -id $item.id -filename $this.samlMetadataExportPath
+            } else {
+              Write-Verbose "Status: $($_.innerexception.response.statuscode)"
+              Throw $_
+            }
+          }
         }
       }
     }
@@ -1625,7 +1635,7 @@ class QlikVirtualProxy{
       if($present) {
         if($this.hasProperties($item))
         {
-          if(Test-Path $this.samlMetadataExportPath) {
+          if($this.samlMetadataExportPath -And (Test-Path $this.samlMetadataExportPath)) {
             return $true
           } else {
             return $false
