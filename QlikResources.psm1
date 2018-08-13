@@ -1543,6 +1543,15 @@ class QlikVirtualProxy{
   [string]$samlAttributeUserDirectory
 
   [DscProperty(Mandatory=$false)]
+  [hashtable]$samlAttributeMapMandatory
+
+  [DscProperty(Mandatory=$false)]
+  [hashtable]$samlAttributeMapOptional
+
+  [DscProperty(Mandatory=$false)]
+  [bool]$samlSlo
+
+  [DscProperty(Mandatory=$false)]
   [string]$samlMetadataExportPath
 
   [DscProperty(Mandatory=$false)]
@@ -1574,6 +1583,24 @@ class QlikVirtualProxy{
       If( $this.samlEntityId ) { $params.Add("samlEntityId", $this.samlEntityId) }
       If( $this.samlAttributeUserId ) { $params.Add("samlAttributeUserId", $this.samlAttributeUserId) }
       If( $this.samlAttributeUserDirectory ) { $params.Add("samlAttributeUserDirectory", $this.samlAttributeUserDirectory) }
+      If( $this.samlAttributeMapMandatory -Or $this.samlAttributeMapOptional ) {
+        $attributes = @()
+        foreach ($attr in $this.samlAttributeMapOptional.keys) {
+          $attributes += @{
+            samlAttribute = $attr
+            senseAttribute = $this.samlAttributeMapOptional.$attr
+          }
+        }
+        foreach ($attr in $this.samlAttributeMapMandatory.keys) {
+          $attributes += @{
+            samlAttribute = $attr
+            senseAttribute = $this.samlAttributeMapMandatory.$attr
+            isMandatory = $true
+          }
+        }
+        $params.Add("samlAttributeMap", $attributes)
+      }
+      if( $this.samlSlo -ne $item.samlSlo ) { $params.Add("samlSlo", $this.samlSlo) }
       If( $this.sessionInactivityTimeout ) { $params.Add("sessionInactivityTimeout", $this.sessionInactivityTimeout) }
 
       if($present)
@@ -1670,6 +1697,8 @@ class QlikVirtualProxy{
       $this.samlEntityId = $item.samlEntityId
       $this.samlAttributeUserId = $item.samlAttributeUserId
       $this.samlAttributeUserDirectory = $item.samlAttributeUserDirectory
+      $this.samlAttributeMap = $item.samlAttributeMap
+      $this.samlSlo = $item.samlSlo
       $this.sessionInactivityTimeout = $item.sessionInactivityTimeout
       $this.Ensure = [Ensure]::Present
     }
@@ -1684,7 +1713,8 @@ class QlikVirtualProxy{
   [bool] hasProperties($item)
   {
     if( !(CompareProperties $this $item @( 'SessionCookieHeaderName', 'authenticationModuleRedirectUri',
-        'samlMetadataIdP', 'samlHostUri', 'samlEntityId', 'samlAttributeUserId', 'samlAttributeUserDirectory', 'sessionInactivityTimeout', 'WindowsAuthenticationEnabledDevicePattern' ) ) )
+        'samlMetadataIdP', 'samlHostUri', 'samlEntityId', 'samlAttributeUserId', 'samlAttributeUserDirectory', 'samlSlo',
+        'sessionInactivityTimeout', 'WindowsAuthenticationEnabledDevicePattern' ) ) )
     {
       return $false
     }
@@ -1744,6 +1774,23 @@ class QlikVirtualProxy{
         if( -Not ($proxies.hostName -Contains $proxy) )
         {
           Write-Verbose "Test-HasProperties: $proxy not linked"
+          return $false
+        }
+      }
+    }
+
+    if($this.samlAttributeMapMandatory -Or $this.samlAttributeMapOptional) {
+      foreach($attr in @($this.samlAttributeMapMandatory + $this.samlAttributeMapOptional)) {
+        $found = $false
+        foreach($existing in $item.samlAttributeMap) {
+          if (($attr.samlAttribute -eq $existing.samlAttribute) -And
+            (($attr.senseAttribute -eq $existing.senseAttribute) -And
+            ($attr.isMandatory -eq $existing.isMandatory))) {
+            $found = $true
+          }
+        }
+        if (! $found) {
+          Write-Verbose "Test-HasProperties: No match found for SAML attribute $($attr.samlAttribute)"
           return $false
         }
       }
@@ -2671,7 +2718,7 @@ function CompareProperties( $expected, $actual, $prop )
   $result = $true
 
   $prop.foreach({
-    If($expected.$_ -And ($actual.$_ -ne $expected.$_)) {
+    If($actual.$_ -ne $expected.$_) {
       Write-Verbose "CompareProperties: $_ property value - $($actual.$_) does not match desired state - $($expected.$_)"
       $result = $false
     }
