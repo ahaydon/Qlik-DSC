@@ -1628,16 +1628,22 @@ class QlikVirtualProxy{
         }
         if( $this.samlMetadataExportPath )
         {
-          Try {
-            Export-QlikMetadata -id $item.id -filename $this.samlMetadataExportPath -ErrorAction SilentlyContinue -ErrorVariable err
-          } Catch {
-            if ($_.exception.response.statuscode -eq 'NotFound') {
-              Start-Sleep -Seconds 10
-              Export-QlikMetadata -id $item.id -filename $this.samlMetadataExportPath
-            } else {
-              Write-Verbose "Status: $($_.innerexception.response.statuscode)"
-              Throw $_
+          $err = $null
+          for ($i = 0; $i -lt 5; $i++) {
+            Try {
+              Export-QlikMetadata -id $item.id -filename $this.samlMetadataExportPath -ErrorAction Ignore -ErrorVariable err
+              break
+            } Catch {
+              if ($_.exception.response.statuscode -eq 'NotFound') {
+                Start-Sleep -Seconds 10
+              } else {
+                Write-Verbose "Status: $($_.innerexception.response.statuscode)"
+                Throw $_
+              }
             }
+          }
+          if ($err) {
+            Throw $err
           }
         }
       }
