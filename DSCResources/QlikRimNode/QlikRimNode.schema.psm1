@@ -10,6 +10,7 @@ Configuration QlikRimNode
     [string] $DbHost,
     [int]$DbPort = 4432,
     [PSCredential] $DbCredential,
+    [string] $Name
     [string] $Hostname = ([System.Net.Dns]::GetHostEntry('localhost')).hostname,
     [bool]$ConfigureLogging = $true,
     [PSCredential]$QLogsWriterPassword,
@@ -20,6 +21,7 @@ Configuration QlikRimNode
     [bool] $Printing,
     [bool] $Proxy,
     [bool] $Scheduler,
+    [string] $NodePurpose,
     [bool] $ApplyCommon,
     [string] $CentralNode
   )
@@ -46,6 +48,9 @@ Configuration QlikRimNode
   }
   if (-Not $QLogsPort) {
     $QLogsPort = $DbPort
+  }
+  if (-Not $Name) {
+    $Name = $Hostname
   }
 
   QlikPackage Sense_Setup
@@ -149,12 +154,14 @@ Configuration QlikRimNode
 
   QlikNode $hostname
   {
-    Ensure    = "Present"
-    HostName  = $hostname
-    Engine    = $Engine
-    Printing  = $Printing
-    Proxy     = $Proxy
-    Scheduler = $Scheduler
-    DependsOn = "[xFirewall]Qlik-Cert", "[QlikConnect]SenseCentral"
+    Ensure      = "Present"
+    Name        = $Name
+    HostName    = $hostname
+    NodePurpose = $NodePurpose
+    Engine      = $Engine
+    Printing    = $Printing
+    Proxy       = $Proxy
+    Scheduler   = $Scheduler
+    DependsOn   = "[xFirewall]Qlik-Cert", "[QlikConnect]SenseCentral"
   }
 }
