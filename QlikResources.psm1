@@ -1019,7 +1019,7 @@ class QlikNode{
 
   [bool] hasProperties($item)
   {
-    if( !(CompareProperties $this $item @( 'NodePurpose', 'Tags' ) ) )
+    if( !(CompareProperties $this $item @( 'NodePurpose', 'Tags', 'Name' ) ) )
     {
       return $false
     }
@@ -1603,7 +1603,7 @@ class QlikVirtualProxy{
         SessionCookieHeaderName = $this.SessionCookieHeaderName
       }
       If( $this.Prefix.Trim('/') ) { $params.Add("prefix", $this.Prefix.Trim('/')) }
-      If( $engines ) { $params.Add("loadBalancingServerNodes", $engines) }
+      If( @($engines).Count -ne @($item.loadBalancingServerNodes).Count ) { $params.Add("loadBalancingServerNodes", $engines) }
       If( $this.websocketCrossOriginWhiteList ) { $params.Add("websocketCrossOriginWhiteList", $this.websocketCrossOriginWhiteList) }
       If( $this.authenticationModuleRedirectUri ) { $params.Add("authenticationModuleRedirectUri", $this.authenticationModuleRedirectUri) }
       If( $this.authenticationMethod ) { $params.Add("authenticationMethod", $this.authenticationMethod) }
@@ -1779,7 +1779,7 @@ class QlikVirtualProxy{
     if($this.loadBalancingServerNodes) {
       $nodes = Get-QlikNode -filter $this.loadBalancingServerNodes | foreach { $_.id } | ? { $_ }
       if(@($nodes).Count -ne @($item.loadBalancingServerNodes).Count) {
-        Write-Verbose "Test-HasProperties: loadBalancingServerNodes property count - $(@($item.loadBalancingServerNodes).Count) does not match desired state - $(@($this.loadBalancingServerNodes).Count)"
+        Write-Verbose "Test-HasProperties: loadBalancingServerNodes property count - $(@($item.loadBalancingServerNodes).Count) does not match desired state - $(@($nodes).Count)"
         return $false
       } else {
         foreach($value in $item.loadBalancingServerNodes) {

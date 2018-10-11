@@ -10,7 +10,7 @@ Configuration QlikRimNode
     [string] $DbHost,
     [int]$DbPort = 4432,
     [PSCredential] $DbCredential,
-    [string] $Name
+    [string] $Name,
     [string] $Hostname = ([System.Net.Dns]::GetHostEntry('localhost')).hostname,
     [bool]$ConfigureLogging = $true,
     [PSCredential]$QLogsWriterPassword,
@@ -23,7 +23,12 @@ Configuration QlikRimNode
     [bool] $Scheduler,
     [string] $NodePurpose,
     [bool] $ApplyCommon,
-    [string] $CentralNode
+    [string] $CentralNode,
+    [int] $ConnectIntervalSec = 15,
+    [int] $ConnectRetryCount = 40,
+
+    [bool] $ManageServices = $true,
+    [bool] $ManageFirewall = $true
   )
 
   Import-DscResource -ModuleName PSDesiredStateConfiguration, QlikResources, xNetworking, xPSDesiredStateConfiguration
@@ -74,74 +79,78 @@ Configuration QlikRimNode
       Ensure = 'Present'
   }
 
-  xFirewall Qlik-Cert
-  {
-    Name                  = "Qlik-Cert"
-    DisplayName           = "Qlik Sense Certificate Distribution"
-    Group                 = "Qlik Sense"
-    Ensure                = "Present"
-    Action                = "Allow"
-    Enabled               = "True"
-    Profile               = ("Domain", "Private", "Public")
-    Direction             = "InBound"
-    LocalPort             = ("4444")
-    Protocol              = "TCP"
-  }
-
-  xFirewall QRS
-  {
-      Name                  = "QRS"
-      DisplayName           = "Qlik Sense Repository Service"
+  if ($ManageFirewall) {
+    xFirewall Qlik-Cert
+    {
+      Name                  = "Qlik-Cert"
+      DisplayName           = "Qlik Sense Certificate Distribution"
       Group                 = "Qlik Sense"
       Ensure                = "Present"
       Action                = "Allow"
       Enabled               = "True"
       Profile               = ("Domain", "Private", "Public")
       Direction             = "InBound"
-      LocalPort             = ("4242")
+      LocalPort             = ("4444")
       Protocol              = "TCP"
+    }
+
+    xFirewall QRS
+    {
+        Name                  = "QRS"
+        DisplayName           = "Qlik Sense Repository Service"
+        Group                 = "Qlik Sense"
+        Ensure                = "Present"
+        Action                = "Allow"
+        Enabled               = "True"
+        Profile               = ("Domain", "Private", "Public")
+        Direction             = "InBound"
+        LocalPort             = ("4242")
+        Protocol              = "TCP"
+    }
   }
 
-  xService QRS
-  {
-    Name = "QlikSenseRepositoryService"
-    State = "Running"
-    DependsOn = "[QlikPackage]Sense_Setup"
-  }
+  if ($ManageServices) {
+    xService QRS
+    {
+      Name = "QlikSenseRepositoryService"
+      State = "Running"
+      DependsOn = "[QlikPackage]Sense_Setup"
+    }
 
-  xService QPR
-  {
-    Name = "QlikSensePrintingService"
-    State = "Running"
-    DependsOn = "[xService]QRS"
-  }
+    xService QPR
+    {
+      Name = "QlikSensePrintingService"
+      State = "Running"
+      DependsOn = "[xService]QRS"
+    }
 
-  xService QSS
-  {
-    Name = "QlikSenseSchedulerService"
-    State = "Running"
-    DependsOn = "[xService]QRS"
-  }
+    xService QSS
+    {
+      Name = "QlikSenseSchedulerService"
+      State = "Running"
+      DependsOn = "[xService]QRS"
+    }
 
-  xService QES
-  {
-    Name = "QlikSenseEngineService"
-    State = "Running"
-    DependsOn = "[xService]QRS"
-  }
+    xService QES
+    {
+      Name = "QlikSenseEngineService"
+      State = "Running"
+      DependsOn = "[xService]QRS"
+    }
 
-  xService QPS
-  {
-    Name = "QlikSenseProxyService"
-    State = "Running"
-    DependsOn = "[xService]QRS"
-  }
+    xService QPS
+    {
+      Name = "QlikSenseProxyService"
+      State = "Running"
+      DependsOn = "[xService]QRS"
+    }
 
-  xService QSD
-  {
-    Name = "QlikSenseServiceDispatcher"
-    State = "Running"
-    DependsOn = "[xService]QRS"
+    xService QSD
+    {
+      Name = "QlikSenseServiceDispatcher"
+      State = "Running"
+      DependsOn = "[xService]QRS"
+    }
   }
 
   QlikConnect SenseCentral
@@ -149,6 +158,8 @@ Configuration QlikRimNode
     Computername  = $CentralNode
     Username      = $QlikAdmin.UserName
     TrustAllCerts = $true
+    RetryDelay    = $ConnectIntervalSec
+    MaxRetries    = $ConnectRetryCount
     DependsOn     = "[xService]QPS"
   }
 

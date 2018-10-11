@@ -18,7 +18,10 @@ Configuration QlikCentral
       [PSCredential]$QLogsWriterPassword,
       [PSCredential]$QLogsReaderPassword,
       [string]$QLogsHostname,
-      [int]$QLogsPort = 4432
+      [int]$QLogsPort = 4432,
+
+      [bool] $ManageService = $true,
+      [bool] $ManageFirewall = $true
   )
 
   Import-DscResource -ModuleName PSDesiredStateConfiguration, xNetworking, xPSDesiredStateConfiguration, xSmbShare
@@ -82,53 +85,55 @@ Configuration QlikCentral
       DependsOn = '[xSmbShare]QlikClusterShare'
   }
 
-  xService QRD
-  {
-    Name = "QlikSenseRepositoryDatabase"
-    State = "Running"
-    DependsOn = "[QlikPackage]Sense_Setup"
-  }
+  if ($ManageServices) {
+    xService QRD
+    {
+      Name = "QlikSenseRepositoryDatabase"
+      State = "Running"
+      DependsOn = "[QlikPackage]Sense_Setup"
+    }
 
-  xService QRS
-  {
-    Name = "QlikSenseRepositoryService"
-    State = "Running"
-    DependsOn = "[xService]QRD"
-  }
+    xService QRS
+    {
+      Name = "QlikSenseRepositoryService"
+      State = "Running"
+      DependsOn = "[xService]QRD"
+    }
 
-  xService QPR
-  {
-    Name = "QlikSensePrintingService"
-    State = "Running"
-    DependsOn = "[xService]QRS"
-  }
+    xService QPR
+    {
+      Name = "QlikSensePrintingService"
+      State = "Running"
+      DependsOn = "[xService]QRS"
+    }
 
-  xService QSS
-  {
-    Name = "QlikSenseSchedulerService"
-    State = "Running"
-    DependsOn = "[xService]QRS"
-  }
+    xService QSS
+    {
+      Name = "QlikSenseSchedulerService"
+      State = "Running"
+      DependsOn = "[xService]QRS"
+    }
 
-  xService QES
-  {
-    Name = "QlikSenseEngineService"
-    State = "Running"
-    DependsOn = "[xService]QRS"
-  }
+    xService QES
+    {
+      Name = "QlikSenseEngineService"
+      State = "Running"
+      DependsOn = "[xService]QRS"
+    }
 
-  xService QPS
-  {
-    Name = "QlikSenseProxyService"
-    State = "Running"
-    DependsOn = "[xService]QRS"
-  }
+    xService QPS
+    {
+      Name = "QlikSenseProxyService"
+      State = "Running"
+      DependsOn = "[xService]QRS"
+    }
 
-  xService QSD
-  {
-    Name = "QlikSenseServiceDispatcher"
-    State = "Running"
-    DependsOn = "[xService]QRS"
+    xService QSD
+    {
+      Name = "QlikSenseServiceDispatcher"
+      State = "Running"
+      DependsOn = "[xService]QRS"
+    }
   }
 
   QlikConnect SenseCentral
@@ -159,59 +164,61 @@ Configuration QlikCentral
     DependsOn    = "[QlikLicense]SiteLicense"
   }
 
-  xFirewall QRD
-  {
-    Name                  = "QRD"
-    DisplayName           = "Qlik Sense Repository Database"
-    Group                 = "Qlik Sense"
-    Ensure                = "Present"
-    Action                = "Allow"
-    Enabled               = "True"
-    Profile               = ("Domain", "Private", "Public")
-    Direction             = "InBound"
-    LocalPort             = ("4432")
-    Protocol              = "TCP"
-  }
+  if ($ManageFirewall) {
+    xFirewall QRD
+    {
+      Name                  = "QRD"
+      DisplayName           = "Qlik Sense Repository Database"
+      Group                 = "Qlik Sense"
+      Ensure                = "Present"
+      Action                = "Allow"
+      Enabled               = "True"
+      Profile               = ("Domain", "Private", "Public")
+      Direction             = "InBound"
+      LocalPort             = ("4432")
+      Protocol              = "TCP"
+    }
 
-  xFirewall QRS
-  {
-    Name                  = "QRS"
-    DisplayName           = "Qlik Sense Repository Service"
-    Group                 = "Qlik Sense"
-    Ensure                = "Present"
-    Action                = "Allow"
-    Enabled               = "True"
-    Profile               = ("Domain", "Private", "Public")
-    Direction             = "InBound"
-    LocalPort             = ("4242")
-    Protocol              = "TCP"
-  }
+    xFirewall QRS
+    {
+      Name                  = "QRS"
+      DisplayName           = "Qlik Sense Repository Service"
+      Group                 = "Qlik Sense"
+      Ensure                = "Present"
+      Action                = "Allow"
+      Enabled               = "True"
+      Profile               = ("Domain", "Private", "Public")
+      Direction             = "InBound"
+      LocalPort             = ("4242")
+      Protocol              = "TCP"
+    }
 
-  xFirewall QPS
-  {
-    Name                  = "QPS"
-    DisplayName           = "Qlik Sense Proxy HTTPS"
-    Group                 = "Qlik Sense"
-    Ensure                = "Present"
-    Action                = "Allow"
-    Enabled               = "True"
-    Profile               = ("Domain", "Private", "Public")
-    Direction             = "InBound"
-    LocalPort             = ("443")
-    Protocol              = "TCP"
-  }
+    xFirewall QPS
+    {
+      Name                  = "QPS"
+      DisplayName           = "Qlik Sense Proxy HTTPS"
+      Group                 = "Qlik Sense"
+      Ensure                = "Present"
+      Action                = "Allow"
+      Enabled               = "True"
+      Profile               = ("Domain", "Private", "Public")
+      Direction             = "InBound"
+      LocalPort             = ("443")
+      Protocol              = "TCP"
+    }
 
-  xFirewall QPS-Auth
-  {
-    Name                  = "QPS-Auth"
-    DisplayName           = "Qlik Sense Proxy Authentication HTTPS"
-    Group                 = "Qlik Sense"
-    Ensure                = "Present"
-    Action                = "Allow"
-    Enabled               = "True"
-    Profile               = ("Domain", "Private", "Public")
-    Direction             = "InBound"
-    LocalPort             = ("4244")
-    Protocol              = "TCP"
+    xFirewall QPS-Auth
+    {
+      Name                  = "QPS-Auth"
+      DisplayName           = "Qlik Sense Proxy Authentication HTTPS"
+      Group                 = "Qlik Sense"
+      Ensure                = "Present"
+      Action                = "Allow"
+      Enabled               = "True"
+      Profile               = ("Domain", "Private", "Public")
+      Direction             = "InBound"
+      LocalPort             = ("4244")
+      Protocol              = "TCP"
+    }
   }
 }
