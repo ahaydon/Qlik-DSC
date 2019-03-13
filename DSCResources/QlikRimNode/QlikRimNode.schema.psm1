@@ -160,7 +160,7 @@ Configuration QlikRimNode
     TrustAllCerts = $true
     RetryDelay    = $ConnectIntervalSec
     MaxRetries    = $ConnectRetryCount
-    DependsOn     = "[xService]QPS"
+    DependsOn     = if($ManageServices){'[xService]QPS'}else{'[QlikPackage]Sense_Setup'}
   }
 
   QlikNode $hostname
@@ -173,6 +173,6 @@ Configuration QlikRimNode
     Printing    = $Printing
     Proxy       = $Proxy
     Scheduler   = $Scheduler
-    DependsOn   = "[xFirewall]Qlik-Cert", "[QlikConnect]SenseCentral"
+    DependsOn   = "[QlikConnect]SenseCentral"
   }
 }

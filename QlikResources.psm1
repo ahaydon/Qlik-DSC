@@ -485,7 +485,7 @@ class QlikConnect{
   [bool]$TrustAllCerts
 
   [DscProperty()]
-  [int]$MaxRetries = 10
+  [int]$MaxRetries = 30
 
   [DscProperty()]
   [int]$RetryDelay = 10
@@ -2578,6 +2578,10 @@ $(if ($this.InstallLocalDb) { $spc_db })
               $process.Start() | Out-Null
               $process.WaitForExit()
               Write-Verbose "$($this.Name) patch finished with Exitcode: $($process.ExitCode)"
+            }
+
+            if (! $this.SkipStartServices) {
+              Start-Service Qlik* -ErrorAction SilentlyContinue
             }
         } else {
             Write-Verbose "Uninstall $($this.Name)"

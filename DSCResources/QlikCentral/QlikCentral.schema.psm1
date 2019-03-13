@@ -20,7 +20,7 @@ Configuration QlikCentral
       [string]$QLogsHostname,
       [int]$QLogsPort = 4432,
 
-      [bool] $ManageService = $true,
+      [bool] $ManageServices = $true,
       [bool] $ManageFirewall = $true
   )
 
@@ -140,7 +140,7 @@ Configuration QlikCentral
   {
     Computername  = $Hostname
     Username      = $QlikAdmin.UserName
-    DependsOn     = "[xService]QPS"
+    DependsOn     = if($ManageServices){'[xService]QPS'}else{'[QlikPackage]Sense_Setup'}
   }
 
   QlikLicense SiteLicense
