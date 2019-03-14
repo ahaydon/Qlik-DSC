@@ -1547,6 +1547,9 @@ class QlikVirtualProxy{
   [DscProperty(Mandatory=$false)]
   [string[]]$websocketCrossOriginWhiteList
 
+  [DscProperty()]
+  [string]$additionalResponseHeaders
+
   [DscProperty(Mandatory=$false)]
   [string[]]$proxy
 
@@ -1605,6 +1608,7 @@ class QlikVirtualProxy{
       If( $this.Prefix.Trim('/') ) { $params.Add("prefix", $this.Prefix.Trim('/')) }
       If( @($engines).Count -ne @($item.loadBalancingServerNodes).Count ) { $params.Add("loadBalancingServerNodes", $engines) }
       If( $this.websocketCrossOriginWhiteList ) { $params.Add("websocketCrossOriginWhiteList", $this.websocketCrossOriginWhiteList) }
+      If( $this.additionalResponseHeaders ) { $params.Add("additionalResponseHeaders", $this.additionalResponseHeaders) }
       If( $this.authenticationModuleRedirectUri ) { $params.Add("authenticationModuleRedirectUri", $this.authenticationModuleRedirectUri) }
       If( $this.authenticationMethod ) { $params.Add("authenticationMethod", $this.authenticationMethod) }
       If( $this.WindowsAuthenticationEnabledDevicePattern ) { $params.Add("windowsAuthenticationEnabledDevicePattern", $this.WindowsAuthenticationEnabledDevicePattern) }
@@ -1729,6 +1733,7 @@ class QlikVirtualProxy{
       $this.authenticationModuleRedirectUri = $item.authenticationModuleRedirectUri
       $this.loadBalancingServerNodes = $item.loadBalancingServerNodes
       $this.websocketCrossOriginWhiteList = $item.websocketCrossOriginWhiteList
+      $this.additionalResponseHeaders = $item.additionalResponseHeaders
       $this.authenticationMethod = $item.authenticationMethod
       $this.samlMetadataIdP = $item.samlMetadataIdP
       $this.samlHostUri = $item.samlHostUri
@@ -1752,7 +1757,7 @@ class QlikVirtualProxy{
   {
     if( !(CompareProperties $this $item @( 'SessionCookieHeaderName', 'authenticationModuleRedirectUri',
         'samlMetadataIdP', 'samlHostUri', 'samlEntityId', 'samlAttributeUserId', 'samlAttributeUserDirectory', 'samlSlo',
-        'sessionInactivityTimeout', 'WindowsAuthenticationEnabledDevicePattern' ) ) )
+        'sessionInactivityTimeout', 'WindowsAuthenticationEnabledDevicePattern', 'additionalResponseHeaders' ) ) )
     {
       return $false
     }
