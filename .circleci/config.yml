@@ -2,7 +2,7 @@ version: 2
 jobs:
   test:
     docker:
-      - image: microsoft/powershell:ubuntu-16.04
+      - image: microsoft/powershell:latest
     steps:
       - checkout
       - run:
