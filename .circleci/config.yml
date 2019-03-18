@@ -1,0 +1,64 @@
+version: 2
+jobs:
+  test:
+    docker:
+      - image: microsoft/powershell:latest
+    steps:
+      - checkout
+      - run:
+          name: Install module dependencies
+          shell: /usr/bin/pwsh
+          command: |
+            (Import-LocalizedData -BaseDirectory (Get-Location).Path -FileName QlikResources.psd1).RequiredModules.ForEach({
+              Install-Module -Name $_ -Force
+            })
+      - run:
+          name: Check that the modules can be imported
+          shell: /usr/bin/pwsh
+          command: Import-Module -Name ./QlikResources.psd1
+      - run:
+          name: Check version has been incremented in manifest
+          shell: /usr/bin/pwsh
+          command: |
+            if ((Test-ModuleManifest -Path ./QlikResources.psd1).Version -le (Find-Module -Name QlikResources).Version) {
+              Write-Error "Module version must be newer than published version"
+            }
+      - run:
+          name: Check that the loaded module version matches the manifest
+          shell: /usr/bin/pwsh
+          command: |
+            Import-Module -Name ./QlikResources.psd1
+            if ((Test-ModuleManifest -Path ./QlikResources.psd1).Version -ne (Get-Module -Name QlikResources).Version) {
+              Write-Error "Version does not match"
+            }
+  deploy:
+    docker:
+      - image: microsoft/powershell:latest
+        command: pwsh
+    steps:
+      - checkout
+      - run:
+          name: Install .Net Core SDK
+          command: |
+            apt-get update
+            apt-get install -y dotnet-sdk-2.1.4
+      - run:
+          name: Publish module to PowerShell Gallery
+          shell: /usr/bin/pwsh
+          command: |
+            Set-Location -Path ..
+            Move-Item -Path project -Destination QlikResources
+            Set-Location -Path QlikResources
+            Publish-Module -Path ./ -NuGetApiKey $env:PSG_API_KEY -Verbose
+workflows:
+  version: 2
+  test-and-deploy:
+    jobs:
+      - test
+      - deploy:
+          requires:
+           - test
+          filters:
+            branches:
+              only: master
+          context: powershell-gallery

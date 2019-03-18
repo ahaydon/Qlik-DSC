@@ -485,7 +485,7 @@ class QlikConnect{
   [bool]$TrustAllCerts
 
   [DscProperty()]
-  [int]$MaxRetries = 10
+  [int]$MaxRetries = 30
 
   [DscProperty()]
   [int]$RetryDelay = 10
@@ -521,7 +521,33 @@ class QlikConnect{
 
   [bool] Test()
   {
-    return $false
+    $cert = $null
+    if( $this.Certificate -And ($this.Certificate.SubString(0, 5) -eq 'cert:' )) {
+      $cert = gci $this.Certificate
+    } elseif( $this.Certificate ) {
+      $cert = Get-PfxCertificate $this.Certificate
+    }
+    $params = @{ Username=$this.Username }
+    if( $this.Computername ) { $params.Add( "Computername", $this.Computername ) }
+    if( $this.Certificate ) { $params.Add( "Certificate", $cert ) }
+    if( $this.TrustAllCerts ) { $params.Add( "TrustAllCerts", $true ) }
+
+    $err = $null
+    try {
+      if (Connect-Qlik -ErrorAction Ignore -ErrorVariable err @params) {
+        # Data returned from connect command so return true
+        return $true
+      }
+    } catch {
+      # An error was thrown when connecting so return false
+      return $false
+    }
+    if ($err) {
+      # The err variable contains an error so return false
+      return $false
+    }
+    # No errors so return true
+    return $true
   }
 
   [QlikConnect] Get()
@@ -907,22 +933,23 @@ class QlikNode{
 
   [void] Set()
   {
-    $item = Get-QlikNode -raw -full -filter "hostName eq '$($this.HostName)'"
+    $item = Get-QlikNode -full -filter "hostName eq '$($this.HostName)'"
     $present = $item -ne $null
 
     if($this.ensure -eq [Ensure]::Present)
     {
       Write-Verbose "Proxy should be $($this.Proxy)"
-      $params = @{}
+      $params = @{
+        engineEnabled = $this.Engine
+        proxyEnabled = $this.Proxy
+        schedulerEnabled = $this.Scheduler
+        printingEnabled = $this.Printing
+        Failover = $this.Failover
+      }
       if($this.Name) { $params.Add("Name", $this.Name) }
       if($this.NodePurpose) { $params.Add("NodePurpose", $this.NodePurpose) }
       if($this.CustomProperties) { $params.Add("CustomProperties", $this.CustomProperties) }
       if($this.Tags) { $params.Add("Tags", $this.Tags) }
-      if($this.Engine) { $params.Add("engineEnabled", $this.Engine) }
-      if($this.Proxy) { $params.Add("proxyEnabled", $this.Proxy) }
-      if($this.Scheduler) { $params.Add("schedulerEnabled", $this.Scheduler) }
-      if($this.Printing) { $params.Add("printingEnabled", $this.Printing) }
-      if($this.Failover) { $params.Add("failoverCandidate", $this.Failover) }
 
       if($present)
       {
@@ -944,7 +971,7 @@ class QlikNode{
 
   [bool] Test()
   {
-    $item = Get-QlikNode -raw -full -filter "hostName eq '$($this.HostName)'"
+    $item = Get-QlikNode -full -filter "hostName eq '$($this.HostName)'"
     $present = $item -ne $null
 
     if($this.ensure -eq [Ensure]::Present) {
@@ -992,7 +1019,7 @@ class QlikNode{
 
   [bool] hasProperties($item)
   {
-    if( !(CompareProperties $this $item @( 'NodePurpose', 'Tags' ) ) )
+    if( !(CompareProperties $this $item @( 'NodePurpose', 'Tags', 'Name' ) ) )
     {
       return $false
     }
@@ -1192,6 +1219,9 @@ class QlikScheduler{
   [string]$Node
 
   [DscProperty()]
+  [string]$KeyProperty = "serverNodeConfiguration.name"
+
+  [DscProperty()]
   [string]$SchedulerServiceType
 
   [DscProperty()]
@@ -1202,19 +1232,19 @@ class QlikScheduler{
 
   [void] Set()
   {
-    $item = Get-QlikScheduler -raw -full -filter "serverNodeConfiguration.name eq '$($this.Node)'"
+    $item = Get-QlikScheduler -raw -full -filter "$($this.KeyProperty) eq '$($this.Node)'"
 
     $params = @{ "id" = $item.id }
     if($this.SchedulerServiceType) { $params.Add("SchedulerServiceType", $this.SchedulerServiceType) }
     if($this.MaxConcurrentEngines) { $params.Add("maxConcurrentEngines", $this.MaxConcurrentEngines) }
-    if($this.EngineTimeout) { $params.Add("engineTimeout", $this.EngineTimeout) }
+    if($this.EngineTimeout -gt 0) { $params.Add("engineTimeout", $this.EngineTimeout) }
 
     Update-QlikScheduler @params
   }
 
   [bool] Test()
   {
-    $item = Get-QlikScheduler -raw -full -filter "serverNodeConfiguration.name eq '$($this.Node)'"
+    $item = Get-QlikScheduler -raw -full -filter "$($this.KeyProperty) eq '$($this.Node)'"
 
     if($this.hasProperties($item))
     {
@@ -1226,7 +1256,7 @@ class QlikScheduler{
 
   [QlikScheduler] Get()
   {
-    $item = Get-QlikScheduler -raw -full -filter "serverNodeConfiguration.name eq '$($this.Node)'"
+    $item = Get-QlikScheduler -raw -full -filter "$($this.KeyProperty) eq '$($this.Node)'"
     $present = $item -ne $null
 
     if ($present)
@@ -1256,7 +1286,7 @@ class QlikScheduler{
       Write-Verbose "Test-HasProperties: MaxConcurrentEngines property value - $($item.settings.maxConcurrentEngines) does not match desired state - $($this.MaxConcurrentEngines)"
       return $false
     }
-    if($item.settings.EngineTimeout -ne $this.EngineTimeout) {
+    if($this.EngineTimeout -gt 0 -and $item.settings.EngineTimeout -ne $this.EngineTimeout) {
       Write-Verbose "Test-HasProperties: EngineTimeout property value - $($item.settings.EngineTimeout) does not match desired state - $($this.EngineTimeout)"
       return $false
     }
@@ -1517,6 +1547,9 @@ class QlikVirtualProxy{
   [DscProperty(Mandatory=$false)]
   [string[]]$websocketCrossOriginWhiteList
 
+  [DscProperty()]
+  [string]$additionalResponseHeaders
+
   [DscProperty(Mandatory=$false)]
   [string[]]$proxy
 
@@ -1562,7 +1595,7 @@ class QlikVirtualProxy{
 
   [void] Set()
   {
-    $item = $(Get-QlikVirtualProxy -raw -filter "Description eq '$($this.Description)'")
+    $item = $(Get-QlikVirtualProxy -filter "Description eq '$($this.Description)'")
     $present = $item -ne $null
 
     if($this.ensure -eq [Ensure]::Present)
@@ -1573,8 +1606,9 @@ class QlikVirtualProxy{
         SessionCookieHeaderName = $this.SessionCookieHeaderName
       }
       If( $this.Prefix.Trim('/') ) { $params.Add("prefix", $this.Prefix.Trim('/')) }
-      If( $engines ) { $params.Add("loadBalancingServerNodes", $engines) }
+      If( @($engines).Count -ne @($item.loadBalancingServerNodes).Count ) { $params.Add("loadBalancingServerNodes", $engines) }
       If( $this.websocketCrossOriginWhiteList ) { $params.Add("websocketCrossOriginWhiteList", $this.websocketCrossOriginWhiteList) }
+      If( $this.additionalResponseHeaders ) { $params.Add("additionalResponseHeaders", $this.additionalResponseHeaders) }
       If( $this.authenticationModuleRedirectUri ) { $params.Add("authenticationModuleRedirectUri", $this.authenticationModuleRedirectUri) }
       If( $this.authenticationMethod ) { $params.Add("authenticationMethod", $this.authenticationMethod) }
       If( $this.WindowsAuthenticationEnabledDevicePattern ) { $params.Add("windowsAuthenticationEnabledDevicePattern", $this.WindowsAuthenticationEnabledDevicePattern) }
@@ -1628,16 +1662,22 @@ class QlikVirtualProxy{
         }
         if( $this.samlMetadataExportPath )
         {
-          Try {
-            Export-QlikMetadata -id $item.id -filename $this.samlMetadataExportPath -ErrorAction SilentlyContinue -ErrorVariable err
-          } Catch {
-            if ($_.exception.response.statuscode -eq 'NotFound') {
-              Start-Sleep -Seconds 10
-              Export-QlikMetadata -id $item.id -filename $this.samlMetadataExportPath
-            } else {
-              Write-Verbose "Status: $($_.innerexception.response.statuscode)"
-              Throw $_
+          $err = $null
+          for ($i = 0; $i -lt 5; $i++) {
+            Try {
+              Export-QlikMetadata -id $item.id -filename $this.samlMetadataExportPath -ErrorAction Ignore -ErrorVariable err
+              break
+            } Catch {
+              if ($_.exception.response.statuscode -eq 'NotFound') {
+                Start-Sleep -Seconds 10
+              } else {
+                Write-Verbose "Status: $($_.innerexception.response.statuscode)"
+                Throw $_
+              }
             }
+          }
+          if ($err) {
+            Throw $err
           }
         }
       }
@@ -1662,15 +1702,17 @@ class QlikVirtualProxy{
       if($present) {
         if($this.hasProperties($item))
         {
-          if($this.samlMetadataExportPath -And (Test-Path $this.samlMetadataExportPath)) {
+          if((! $this.samlMetadataExportPath) -Or (Test-Path $this.samlMetadataExportPath)) {
             return $true
           } else {
+            Write-Verbose "File not found at $($this.samlMetadataExportPath)"
             return $false
           }
         } else {
           return $false
         }
       } else {
+        Write-Verbose -Message "VirtualProxy should be present but was not found"
         return $false
       }
     }
@@ -1691,6 +1733,7 @@ class QlikVirtualProxy{
       $this.authenticationModuleRedirectUri = $item.authenticationModuleRedirectUri
       $this.loadBalancingServerNodes = $item.loadBalancingServerNodes
       $this.websocketCrossOriginWhiteList = $item.websocketCrossOriginWhiteList
+      $this.additionalResponseHeaders = $item.additionalResponseHeaders
       $this.authenticationMethod = $item.authenticationMethod
       $this.samlMetadataIdP = $item.samlMetadataIdP
       $this.samlHostUri = $item.samlHostUri
@@ -1714,7 +1757,7 @@ class QlikVirtualProxy{
   {
     if( !(CompareProperties $this $item @( 'SessionCookieHeaderName', 'authenticationModuleRedirectUri',
         'samlMetadataIdP', 'samlHostUri', 'samlEntityId', 'samlAttributeUserId', 'samlAttributeUserDirectory', 'samlSlo',
-        'sessionInactivityTimeout', 'WindowsAuthenticationEnabledDevicePattern' ) ) )
+        'sessionInactivityTimeout', 'WindowsAuthenticationEnabledDevicePattern', 'additionalResponseHeaders' ) ) )
     {
       return $false
     }
@@ -1741,7 +1784,7 @@ class QlikVirtualProxy{
     if($this.loadBalancingServerNodes) {
       $nodes = Get-QlikNode -filter $this.loadBalancingServerNodes | foreach { $_.id } | ? { $_ }
       if(@($nodes).Count -ne @($item.loadBalancingServerNodes).Count) {
-        Write-Verbose "Test-HasProperties: loadBalancingServerNodes property count - $(@($item.loadBalancingServerNodes).Count) does not match desired state - $(@($this.loadBalancingServerNodes).Count)"
+        Write-Verbose "Test-HasProperties: loadBalancingServerNodes property count - $(@($item.loadBalancingServerNodes).Count) does not match desired state - $(@($nodes).Count)"
         return $false
       } else {
         foreach($value in $item.loadBalancingServerNodes) {
@@ -2464,7 +2507,7 @@ class QlikPackage {
                 if($this.ServiceCredential) {
                     [String]$parsedSetupParams += " userpassword=`"$([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($this.ServiceCredential.Password)))`""
                 }
-                if($this.dbpassword) { [String]$parsedSetupParams += " dbpassword=`"$([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($this.DbSuperUserPassword.Password)))`"" }
+                if($this.DbSuperUserPassword) { [String]$parsedSetupParams += " dbpassword=`"$([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($this.DbSuperUserPassword.Password)))`"" }
             } else {
                 if($this.Rimnodetype) {
                     [String]$parsedSetupParams += " rimnodetype=$($this.Rimnodetype)"
@@ -2473,7 +2516,7 @@ class QlikPackage {
                     }
                 }
                 if($this.Rimnode) { [String]$parsedSetupParams += " rimnode=1" }
-                if($this.dbpassword) { [String]$parsedSetupParams += " dbpassword=`"$([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($this.DbSuperUserPassword.Password)))`"" }
+                if($this.DbSuperUserPassword) { [String]$parsedSetupParams += " dbpassword=`"$([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($this.DbSuperUserPassword.Password)))`"" }
                 if($this.Hostname) { [String]$parsedSetupParams += " hostname=`"$($this.Hostname)`"" }
                 if($this.ServiceCredential) { [String]$parsedSetupParams += " userwithdomain=`"$($this.ServiceCredential.Username)`" userpassword=`"$([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($this.ServiceCredential.Password)))`"" }
 
@@ -2540,6 +2583,10 @@ $(if ($this.InstallLocalDb) { $spc_db })
               $process.Start() | Out-Null
               $process.WaitForExit()
               Write-Verbose "$($this.Name) patch finished with Exitcode: $($process.ExitCode)"
+            }
+
+            if (! $this.SkipStartServices) {
+              Start-Service Qlik* -ErrorAction SilentlyContinue
             }
         } else {
             Write-Verbose "Uninstall $($this.Name)"
@@ -2718,7 +2765,7 @@ function CompareProperties( $expected, $actual, $prop )
   $result = $true
 
   $prop.foreach({
-    If($actual.$_ -ne $expected.$_) {
+    If($expected.$_ -And ($actual.$_ -ne $expected.$_)) {
       Write-Verbose "CompareProperties: $_ property value - $($actual.$_) does not match desired state - $($expected.$_)"
       $result = $false
     }
