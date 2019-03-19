@@ -1,6 +1,7 @@
 version: 2
 jobs:
-  test:
+  deploy:
+    working_directory: ~/QlikResources
     docker:
       - image: microsoft/powershell:ubuntu-16.04
     steps:
@@ -20,13 +21,6 @@ jobs:
             if ((Test-ModuleManifest -Path ./QlikResources.psd1).Version -le (Find-Module -Name QlikResources).Version) {
               Write-Error "Module version must be newer than published version"
             }
-
-  deploy:
-    working_directory: ~/QlikResources
-    docker:
-      - image: microsoft/powershell:ubuntu-16.04
-    steps:
-      - checkout
       - run:
           name: Install .Net Core SDK
           command: |
@@ -41,10 +35,7 @@ workflows:
   version: 2
   test-and-deploy:
     jobs:
-      - test
       - deploy:
-          requires:
-           - test
           filters:
             branches:
               only: master
