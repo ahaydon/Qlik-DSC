@@ -494,15 +494,20 @@ class QlikConnect{
   {
     $cert = $null
     if( $this.Certificate -And ($this.Certificate.SubString(0, 5) -eq 'cert:' )) {
-      $cert = gci $this.Certificate
+      $cert = Get-ChildItem $this.Certificate
     } elseif( $this.Certificate ) {
       $cert = Get-PfxCertificate $this.Certificate
     }
-    $params = @{ Username=$this.Username }
+    if( !$cert ) {
+      $cert = Get-ChildItem Cert:\CurrentUser\My\ | Where-Object Subject -eq CN=QlikClient
+    }
+    $params = @{}
+    if( $cert ) {
+      $params.Username = $this.Username
+      $params.Certificate = $cert
+    }
     if( $this.Computername ) { $params.Add( "Computername", $this.Computername ) }
-    if( $this.Certificate ) { $params.Add( "Certificate", $cert ) }
     if( $this.TrustAllCerts ) { $params.Add( "TrustAllCerts", $true ) }
-    #Connect-Qlik @params -TrustAllCerts
     $err = $null
     for ($i = 1; $i -le $this.MaxRetries; $i++) {
       Write-Progress "Connecting to Qlik, attempt $i"
@@ -511,6 +516,8 @@ class QlikConnect{
           break
         }
       } catch {
+        Write-Warning $_.Exception.Message
+        $err = $_
         Start-Sleep $this.RetryDelay
       }
     }
@@ -527,9 +534,15 @@ class QlikConnect{
     } elseif( $this.Certificate ) {
       $cert = Get-PfxCertificate $this.Certificate
     }
-    $params = @{ Username=$this.Username }
+    if( !$cert ) {
+      $cert = Get-ChildItem Cert:\CurrentUser\My\ | Where-Object Subject -eq CN=QlikClient
+    }
+    $params = @{}
+    if( $cert ) {
+      $params.Username = $this.Username
+      $params.Certificate = $cert
+    }
     if( $this.Computername ) { $params.Add( "Computername", $this.Computername ) }
-    if( $this.Certificate ) { $params.Add( "Certificate", $cert ) }
     if( $this.TrustAllCerts ) { $params.Add( "TrustAllCerts", $true ) }
 
     $err = $null
