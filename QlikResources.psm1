@@ -1567,7 +1567,7 @@ class QlikVirtualProxy{
   [string[]]$proxy
 
   [DscProperty(Mandatory=$false)]
-  [ValidateSet("ticket","static","dynamic","saml","jwt", IgnoreCase=$false)]
+  [ValidateSet("Ticket","static","dynamic","SAML","JWT", IgnoreCase=$false)]
   [string]$authenticationMethod
 
   [DscProperty()]
@@ -1608,7 +1608,7 @@ class QlikVirtualProxy{
 
   [void] Set()
   {
-    $item = $(Get-QlikVirtualProxy -filter "Description eq '$($this.Description)'")
+    $item = $(Get-QlikVirtualProxy -full -filter "Description eq '$($this.Description)'")
     $present = $item -ne $null
 
     if($this.ensure -eq [Ensure]::Present)
@@ -1707,7 +1707,7 @@ class QlikVirtualProxy{
 
   [bool] Test()
   {
-    $item = Get-QlikVirtualProxy -raw -filter "Description eq '$($this.Description)'"
+    $item = Get-QlikVirtualProxy -full -filter "Description eq '$($this.Description)'"
     $present = $item -ne $null
 
     if($this.Ensure -eq [Ensure]::Present)
@@ -1737,7 +1737,7 @@ class QlikVirtualProxy{
 
   [QlikVirtualProxy] Get()
   {
-    $item = $(Get-QlikVirtualProxy -raw -filter "Description eq '$($this.Description)'")
+    $item = $(Get-QlikVirtualProxy -full -filter "Description eq '$($this.Description)'")
     $present = $item -ne $null
     if ($present)
     {
@@ -1753,7 +1753,10 @@ class QlikVirtualProxy{
       $this.samlEntityId = $item.samlEntityId
       $this.samlAttributeUserId = $item.samlAttributeUserId
       $this.samlAttributeUserDirectory = $item.samlAttributeUserDirectory
-      $this.samlAttributeMap = $item.samlAttributeMap
+      $this.samlAttributeMapMandatory = @{}
+      $item.samlAttributeMap.Where{$_.isMandatory}.ForEach{$this.samlAttributeMapMandatory[$_.samlAttribute]=$_.senseAttribute}
+      $this.samlAttributeMapOptional = @{}
+      $item.samlAttributeMap.Where{!$_.isMandatory}.ForEach{$this.samlAttributeMapOptional[$_.samlAttribute]=$_.senseAttribute}
       $this.samlSlo = $item.samlSlo
       $this.sessionInactivityTimeout = $item.sessionInactivityTimeout
       $this.Ensure = [Ensure]::Present
