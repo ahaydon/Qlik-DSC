@@ -56,7 +56,7 @@ Configuration QlikCentral
   {
       Path = $ClusterPath
       Name = $ClusterShareName
-      FullAccess = $SenseService.GetNetworkCredential().UserName
+      FullAccess = $SenseService.UserName
       Ensure = 'Present'
       DependsOn = '[File]QlikClusterRoot'
   }
