@@ -2481,7 +2481,7 @@ class QlikPackage {
     [string]$ListenAddresses = "*"
 
     [DscProperty()]
-    [string]$IpRange = "0.0.0.0/0"
+    [string]$IpRange = "0.0.0.0/0,::/0"
 
     [DscProperty()]
     [bool]$ConfigureLogging = $true
