@@ -2088,9 +2088,6 @@ class QlikProxy {
           $this.KerberosAuthentication = $item.settings.kerberosAuthentication
           $this.UnencryptedAuthenticationListenPort = $item.settings.unencryptedAuthenticationListenPort
           $this.SslBrowserCertificateThumbprint = $item.settings.sslBrowserCertificateThumbprint
-          $this.Ensure = [Ensure]::Present
-        } else {
-            $this.Ensure = [Ensure]::Absent
         }
         return $this
     }
