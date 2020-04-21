@@ -2583,7 +2583,8 @@ $(if ($this.InstallLocalDb) { $spc_db })
             $startInfo.Arguments = $parsedSetupParams
             $process.Start() | Out-Null
             $process.WaitForExit()
-            Write-Verbose "$($this.Name) installation finished with Exitcode: $($process.ExitCode)"
+            if ($this.ExitCode -ne $process.ExitCode) { Write-Error "$($this.Name) installation failed with Exitcode: $($process.ExitCode)" -ErrorAction Stop }
+            else { Write-Verbose "$($this.Name) installation finished with Exitcode: $($process.ExitCode)" }
 
             if ($this.Patch) {
               Write-Verbose "Starting `"$($this.Patch)`" install"
@@ -2595,7 +2596,8 @@ $(if ($this.InstallLocalDb) { $spc_db })
               $startInfo.Arguments = "install"
               $process.Start() | Out-Null
               $process.WaitForExit()
-              Write-Verbose "$($this.Name) patch finished with Exitcode: $($process.ExitCode)"
+              if ($this.ExitCode -ne $process.ExitCode) { Write-Error "$($this.Name) patch failed with Exitcode: $($process.ExitCode)" -ErrorAction Stop }
+              else { Write-Verbose "$($this.Name) patch finished with Exitcode: $($process.ExitCode)" }
             }
 
             if (! $this.SkipStartServices) {
