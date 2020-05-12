@@ -20,7 +20,7 @@ class QlikApp{
   [DscProperty(Key)]
   [string]$Name
 
-  [DscProperty(Mandatory)]
+  [DscProperty()]
   [string]$Source
 
   [DscProperty()]
