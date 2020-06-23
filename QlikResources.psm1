@@ -2507,11 +2507,15 @@ class QlikPackage {
     [DscProperty()]
     [Int]$ExitCode=0
 
+    [DscProperty()]
+    [bool]$AcceptEula
+
     [void] Set() {
         if($this.Ensure -eq [Ensure]::Present) {
             Write-Verbose "Install $($this.Name)"
             [String]$parsedSetupParams = "-silent"
             if($this.LogFile) { [String]$parsedSetupParams += " -log `"$($this.LogFile)`"" }
+            if($this.AcceptEula) { [string]$parsedSetupParams += " accepteula=1"}
             # if applying a patch after install we should not start the services
             if($this.SkipStartServices -Or $this.Patch) { [String]$parsedSetupParams += " skipstartservices=1" }
             if($this.InstallDir) { [String]$parsedSetupParams += " installdir=`"$($this.InstallDir)`"" }
