@@ -64,7 +64,6 @@ Configuration QlikCentral
   QlikPackage Sense_Setup
   {
       Name = $ProductName
-      #ProductId = '{0c721ce8-57a8-4fef-9edb-a301370fad93}'
       Setup = $SetupPath
       Patch = $PatchPath
       ServiceCredential = $SenseService
@@ -81,6 +80,7 @@ Configuration QlikCentral
       QLogsReaderPassword = $QLogsReaderPassword
       QLogsHostname = $QLogsHostname
       QLogsPort = $QLogsPort
+      AcceptEula = $true
       Ensure = 'Present'
       DependsOn = '[xSmbShare]QlikClusterShare'
   }

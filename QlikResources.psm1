@@ -951,7 +951,6 @@ class QlikNode{
 
     if($this.ensure -eq [Ensure]::Present)
     {
-      Write-Verbose "Proxy should be $($this.Proxy)"
       $params = @{
         engineEnabled = $this.Engine
         proxyEnabled = $this.Proxy
@@ -969,6 +968,21 @@ class QlikNode{
         if(-not $this.hasProperties($item))
         {
           Update-QlikNode -id $item.id @params
+        }
+        $counter = 0
+        while (Get-QlikServiceStatus -full -filter "serverNodeConfiguration.id eq $($item.id) and serviceType eq Repository and serviceState eq NoCommunication") {
+            $counter++
+            if ($counter -gt 20) { throw "Repository service status is NoCommunication" }
+            Start-Sleep -Seconds 15
+        }
+        if ($state = Get-QlikServiceStatus -full -filter "serverNodeConfiguration.id eq $($item.id) and serviceType eq Repository and serviceState ne Running") {
+            Write-Verbose "Repository service status is $($state.serviceState)"
+            $password = Invoke-QlikGet "/qrs/servernoderegistration/start/$($item.id)"
+            if ($password) {
+                Write-Verbose "Unlocking certificates on node"
+                $postParams = @{__pwd = "$password" }
+                Invoke-WebRequest -Uri "http://localhost:4570/certificateSetup" -Method Post -Body $postParams -UseBasicParsing > $null
+            }
         }
       }
       else
@@ -991,6 +1005,10 @@ class QlikNode{
       if($present) {
         if($this.hasProperties($item))
         {
+          if ($state = Get-QlikServiceStatus -full -filter "serverNodeConfiguration.id eq $($item.id) and serviceType eq Repository and serviceState ne Running") {
+            Write-Verbose "Repository service status is $($state.serviceState)"
+            return $false
+          }
           return $true
         } else {
           return $false
