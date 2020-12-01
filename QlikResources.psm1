@@ -2191,6 +2191,15 @@ class QlikServiceCluster{
   [DscProperty()]
   [string] $ArchivedLogsRootFolder
 
+  [DscProperty()]
+  [string] $EncryptionKeyThumbprint
+
+  [DscProperty()]
+  [bool] $EnableEncryptQvf
+
+  [DscProperty()]
+  [bool] $EnableEncryptQvd
+
   [void] Set()
   {
     $item = Get-QlikServiceCluster -filter "name eq '$($this.Name)'" -raw
@@ -2214,6 +2223,10 @@ class QlikServiceCluster{
         if ($this.Connector32RootFolder) { $params.Add("connector32RootFolder", $this.Connector32RootFolder) }
         if ($this.Connector64RootFolder) { $params.Add("connector64RootFolder", $this.Connector64RootFolder) }
         if ($this.ArchivedLogsRootFolder) { $params.Add("archivedLogsRootFolder", $this.ArchivedLogsRootFolder) }
+        if ($this.EncryptionKeyThumbprint) { $params.Add("encryptionKeyThumbprint", $this.EncryptionKeyThumbprint) }
+        $params.Add("enableEncryptQvf", $this.EnableEncryptQvf)
+        $params.Add("enableEncryptQvd", $this.EnableEncryptQvd)
+
         Update-QlikServiceCluster @params
       }
     }
@@ -2279,6 +2292,10 @@ class QlikServiceCluster{
       return $false
     }
     if (-Not (CompareProperties $this $item.settings.sharedPersistenceProperties @('rootFolder', 'appFolder', 'staticContentRootFolder', 'connector32RootFolder', 'connector64RootFolder', 'archivedLogsRootFolder')))
+    {
+      return $false
+    }
+    if (-Not (CompareProperties $this $item.settings.encryption @('encryptionKeyThumbprint', 'enableEncryptQvf', 'enableEncryptQvd')))
     {
       return $false
     }
