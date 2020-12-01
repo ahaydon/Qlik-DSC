@@ -27,7 +27,7 @@ The module can be installed from the PowerShell Gallery using NuGet, run the fol
 
 ```powershell
 Get-PackageProvider -Name NuGet -ForceBootstrap
-Install-Module Qlik-Cli
+Install-Module QlikResources
 ```
 
 If you do not have internet access from the machine on which the module will be installed, it can be installed by downloading and extracting the files to C:\Program Files\WindowsPowerShell\Modules\QlikResources\, the module will then be loaded the next time you open a PowerShell console.

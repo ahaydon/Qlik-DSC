@@ -4,7 +4,7 @@
 RootModule = 'QlikResources.psm1'
 
 # Version number of this module.
-ModuleVersion = '1.9.2'
+ModuleVersion = '1.10.0'
 
 # ID used to uniquely identify this module
 GUID = '81624038-5e71-40f8-8905-b1a87afe22d7'
@@ -55,22 +55,25 @@ RequiredModules = @('Qlik-Cli', 'xNetworking', 'xPSDesiredStateConfiguration', '
 # FormatsToProcess = @()
 
 # Modules to import as nested modules of the module specified in RootModule/ModuleToProcess
-# NestedModules = @()
+NestedModules = @('DSCClassResources/WaitForQlikResource.psm1', 'DSCClassResources/QlikOdag.psm1')
 
 # Functions to export from this module
-FunctionsToExport = '*'
+FunctionsToExport = ''
 
 # Cmdlets to export from this module
-CmdletsToExport = '*'
+CmdletsToExport = ''
 
 # Variables to export from this module
-VariablesToExport = '*'
+VariablesToExport = ''
 
 # Aliases to export from this module
-AliasesToExport = '*'
+AliasesToExport = ''
 
 # DSC resources to export from this module
-DscResourcesToExport = '*'
+DscResourcesToExport = @('QlikApp', 'QlikConnect', 'QlikContentLibrary', 'QlikCustomProperty', 'QlikDataConnection',
+    'QlikEngine', 'QlikExtension', 'QlikLicense', 'QlikNode', 'QlikOdag', 'QlikPackage', 'QlikProxy', 'QlikRule', 'QlikScheduler',
+    'QlikServiceCluster', 'QlikStream', 'QlikTask', 'QlikVirtualProxy', 'QlikUser', 'ConfigFile', 'EncryptConfig',
+    'WaitForQlikResource')
 
 # List of all modules packaged with this module
 # ModuleList = @()
