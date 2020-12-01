@@ -1915,11 +1915,73 @@ class QlikEngine {
     [DscProperty()]
     [Bool]$StandardReload
 
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$auditActivityLogVerbosity
+
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$auditSecurityLogVerbosity
+
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$systemLogVerbosity
+
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$externalServicesLogVerbosity
+
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$qixPerformanceLogVerbosity
+
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$serviceLogVerbosity
+
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$httpTrafficLogVerbosity
+
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$auditLogVerbosity
+
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$trafficLogVerbosity
+
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$sessionLogVerbosity
+
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$performanceLogVerbosity
+
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$sseLogVerbosity
+
     [Void] Set () {
         Write-Verbose "Get Qlik Engine: $($this.Node)"
         $item = Get-QlikEngine -Full -Filter "serverNodeConfiguration.hostName eq '$($this.Node)'"
         if($item.id) {
-            $engparams = @{ "id" = $item.id }
+            $engparams = @{
+                "id" = $item.id
+                auditActivityLogVerbosity = $this.auditActivityLogVerbosity
+                auditSecurityLogVerbosity = $this.auditSecurityLogVerbosity
+                systemLogVerbosity = $this.systemLogVerbosity
+                externalServicesLogVerbosity = $this.externalServicesLogVerbosity
+                qixPerformanceLogVerbosity = $this.qixPerformanceLogVerbosity
+                serviceLogVerbosity = $this.serviceLogVerbosity
+                httpTrafficLogVerbosity = $this.httpTrafficLogVerbosity
+                auditLogVerbosity = $this.auditLogVerbosity
+                trafficLogVerbosity = $this.trafficLogVerbosity
+                sessionLogVerbosity = $this.sessionLogVerbosity
+                performanceLogVerbosity = $this.performanceLogVerbosity
+                sseLogVerbosity = $this.sseLogVerbosity
+            }
             if($this.DocumentDirectory) { $engparams.Add("documentDirectory", $this.DocumentDirectory) }
             if($this.DocumentTimeout) { $engparams.Add("documentTimeout", $this.DocumentTimeout) }
             if($this.MinMemUsage) { $engparams.Add("workingSetSizeLoPct", $this.MinMemUsage) }
@@ -2027,6 +2089,24 @@ class QlikEngine {
         if($PSBoundParameters.ContainsKey('StandardReload') -And ($item.settings.standardReload -ne $this.StandardReload)) {
             Write-Verbose "Test-HasProperties: Standard reload property value - $($item.settings.standardReload) does not match desired state - $($this.StandardReload)"
             $desiredState = $false
+        }
+        $logLevels = @(
+            'auditActivityLogVerbosity',
+            'auditSecurityLogVerbosity',
+            'systemLogVerbosity',
+            'externalServicesLogVerbosity',
+            'qixPerformanceLogVerbosity',
+            'serviceLogVerbosity',
+            'httpTrafficLogVerbosity',
+            'auditLogVerbosity',
+            'trafficLogVerbosity',
+            'sessionLogVerbosity',
+            'performanceLogVerbosity',
+            'sseLogVerbosity'
+        )
+        if (-Not (CompareProperties $this $item.settings $logLevels))
+        {
+          return $false
         }
         return $desiredState
     }
