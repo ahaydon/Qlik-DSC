@@ -11,6 +11,14 @@ enum ReloadOn
   Update
 }
 
+enum authenticationMethod {
+    Ticket = 0
+    Static = 1
+    Dynamic = 2
+    SAML = 3
+    JWT = 4
+}
+
 [DscResource()]
 class QlikApp{
 
@@ -1637,7 +1645,7 @@ class QlikVirtualProxy{
         SessionCookieHeaderName = $this.SessionCookieHeaderName
       }
       If( $this.Prefix.Trim('/') ) { $params.Add("prefix", $this.Prefix.Trim('/')) }
-      If( @($engines).Count -ne @($item.loadBalancingServerNodes).Count ) { $params.Add("loadBalancingServerNodes", $engines) }
+      If( @($engines).Count -ne $item.loadBalancingServerNodes.Count ) { $params.Add("loadBalancingServerNodes", $engines) }
       If( $this.websocketCrossOriginWhiteList ) { $params.Add("websocketCrossOriginWhiteList", $this.websocketCrossOriginWhiteList) }
       If( $this.additionalResponseHeaders ) { $params.Add("additionalResponseHeaders", $this.additionalResponseHeaders) }
       If( $this.authenticationModuleRedirectUri ) { $params.Add("authenticationModuleRedirectUri", $this.authenticationModuleRedirectUri) }
@@ -1802,32 +1810,25 @@ class QlikVirtualProxy{
     }
 
     if($this.authenticationMethod) {
-        $authenticationMethodCode = switch ($this.authenticationMethod) {
-            'ticket'  { 0 }
-            'static'  { 1 }
-            'dynamic' { 2 }
-            'saml'    { 3 }
-            'jwt'     { 4 }
-        }
-        If($authenticationMethodCode -ne $item.authenticationMethod) {
-            Write-Verbose "Test-HasProperties: authenticationMethod - $($item.authenticationMethod) does not match desired state - $authenticationMethodCode"
+        If([authenticationMethod]$this.authenticationMethod -ne [authenticationMethod]$item.authenticationMethod) {
+            Write-Verbose "Test-HasProperties: authenticationMethod - $($item.authenticationMethod) does not match desired state - $($this.authenticationMethod)"
             return $false
         }
     }
 
     if($this.loadBalancingServerNodes) {
-      $nodes = Get-QlikNode -filter $this.loadBalancingServerNodes | foreach { $_.id } | ? { $_ }
-      if(@($nodes).Count -ne @($item.loadBalancingServerNodes).Count) {
-        Write-Verbose "Test-HasProperties: loadBalancingServerNodes property count - $(@($item.loadBalancingServerNodes).Count) does not match desired state - $(@($nodes).Count)"
-        return $false
-      } else {
-        foreach($value in $item.loadBalancingServerNodes) {
-          if($nodes -notcontains $value.id) {
-            Write-Verbose "Test-HasProperties: loadBalancingServerNodes property value - $($value) not found in desired state"
+        $nodes = Get-QlikNode -filter $this.loadBalancingServerNodes | foreach { $_.id } | ? { $_ }
+        $configured = [pscustomobject[]]$item.loadBalancingServerNodes
+        if ($nodes.Count -ne $configured.Count) {
+            Write-Verbose "Test-HasProperties: loadBalancingServerNodes property count - $($configured.Count) does not match desired state - $(@($nodes).Count)"
             return $false
-          }
         }
-      }
+        if ($nodes.Count -ne 0 -and $configured.Count -ne 0) {
+            if (($diffs = Compare-Object $nodes $configured.id).Length -ne 0) {
+                Write-Verbose "Test-HasProperties: loadBalancingServerNodes has $($diffs.Length) differences"
+                return $false
+            }
+        }
     }
 
     if($this.websocketCrossOriginWhiteList) {
@@ -1857,20 +1858,34 @@ class QlikVirtualProxy{
     }
 
     if($this.samlAttributeMapMandatory -Or $this.samlAttributeMapOptional) {
-      foreach($attr in @($this.samlAttributeMapMandatory + $this.samlAttributeMapOptional)) {
-        $found = $false
-        foreach($existing in $item.samlAttributeMap) {
-          if (($attr.samlAttribute -eq $existing.samlAttribute) -And
-            (($attr.senseAttribute -eq $existing.senseAttribute) -And
-            ($attr.isMandatory -eq $existing.isMandatory))) {
-            $found = $true
-          }
+        foreach ($attr in $this.samlAttributeMapMandatory.Keys) {
+            $found = $false
+            foreach($existing in $item.samlAttributeMap) {
+                if (($attr -eq $existing.samlAttribute) -And
+                    (($this.samlAttributeMapMandatory.$attr -eq $existing.senseAttribute) -And
+                    ($existing.isMandatory -eq $true))) {
+                    $found = $true
+                }
+            }
+            if (! $found) {
+                Write-Verbose "Test-HasProperties: No match found for mandatory SAML attribute $($attr.samlAttribute)"
+                return $false
+            }
         }
-        if (! $found) {
-          Write-Verbose "Test-HasProperties: No match found for SAML attribute $($attr.samlAttribute)"
-          return $false
+        foreach ($attr in $this.samlAttributeMapOptional.Keys) {
+            $found = $false
+            foreach($existing in $item.samlAttributeMap) {
+                if (($attr -eq $existing.samlAttribute) -And
+                    (($this.samlAttributeMapOptional.$attr -eq $existing.senseAttribute) -And
+                    ($existing.isMandatory -eq $false))) {
+                    $found = $true
+                }
+            }
+            if (! $found) {
+                Write-Verbose "Test-HasProperties: No match found for optional SAML attribute $($attr.samlAttribute)"
+                return $false
+            }
         }
-      }
     }
 
     return $true
