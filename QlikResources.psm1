@@ -2719,7 +2719,7 @@ $(if ($this.InstallLocalDb) { $spc_db })
                 $spc | Out-File -FilePath "$env:temp\spc.cfg"
                 [String]$parsedSetupParams += " spc=`"$env:temp\spc.cfg`""
             }
-            Write-Verbose "Starting `"$($this.Setup)`" $parsedSetupParams"
+            Write-Verbose "Starting `"$($this.Setup)`" $($parsedSetupParams -replace '(?<=password=")([^"]*)', '****')"
             $startInfo = New-Object System.Diagnostics.ProcessStartInfo
             $startInfo.UseShellExecute = $false #Necessary for I/O redirection and just generally a good idea
             $process = New-Object System.Diagnostics.Process
