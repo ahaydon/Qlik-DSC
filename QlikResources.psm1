@@ -2282,7 +2282,7 @@ class QlikServiceCluster{
 
   [void] Set()
   {
-    $item = Get-QlikServiceCluster -filter "name eq '$($this.Name)'" -raw
+    $item = Get-QlikServiceCluster -filter "name eq '$($this.Name)'" -raw -full
     $present = $item -ne $null
 
     if ($this.ensure -eq [Ensure]::Present)
@@ -2322,7 +2322,7 @@ class QlikServiceCluster{
 
   [bool] Test()
   {
-    $item = Get-QlikServiceCluster -filter "name eq '$($this.Name)'" -raw
+    $item = Get-QlikServiceCluster -filter "name eq '$($this.Name)'" -raw -full
     $present = $item -ne $null
 
     if ($this.Ensure -eq [Ensure]::Present)
@@ -2352,10 +2352,21 @@ class QlikServiceCluster{
 
   [QlikServiceCluster] Get()
   {
-    $item = Get-QlikServiceCluster -filter "name eq '$($this.Name)'" -raw
+    $item = Get-QlikServiceCluster -filter "name eq '$($this.Name)'" -raw -full
     if ($item -ne $null)
     {
       $this.Ensure = [Ensure]::Present
+      $this.PersistenceType = $item.settings.PersistenceType
+      $this.PersistenceMode = $item.settings.PersistenceMode
+      $this.RootFolder = $item.settings.RootFolder
+      $this.AppFolder = $item.settings.AppFolder
+      $this.StaticContentRootFolder = $item.settings.StaticContentRootFolder
+      $this.Connector32RootFolder = $item.settings.Connector32RootFolder
+      $this.Connector64RootFolder = $item.settings.Connector64RootFolder
+      $this.ArchivedLogsRootFolder = $item.settings.ArchivedLogsRootFolder
+      $this.EncryptionKeyThumbprint = $item.settings.encryption.EncryptionKeyThumbprint
+      $this.EnableEncryptQvf = $item.settings.encryption.EnableEncryptQvf
+      $this.EnableEncryptQvd = $item.settings.encryption.EnableEncryptQvd
     }
     else
     {

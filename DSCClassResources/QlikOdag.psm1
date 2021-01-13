@@ -21,10 +21,10 @@ class QlikOdag {
 
     [DscProperty()]
     [int] $AnonymousAppCleanup
-    
+
     # Gets the resource's current state.
     [QlikOdag] Get() {
-        $item = Invoke-QlikGet "/qrs/odagservice/full"
+        $item = (Invoke-QlikGet "/qrs/odagservice/full").settings
 
         $this.Enabled = $item.enabled
         $this.DynamicViewEnabled = $item.DynamicViewEnabled
@@ -35,7 +35,7 @@ class QlikOdag {
 
         return $this
     }
-    
+
     # Sets the desired state of the resource.
     [void] Set() {
         $params = @{
@@ -49,10 +49,10 @@ class QlikOdag {
 
         Update-QlikOdag @params
     }
-    
+
     # Tests if the resource is in the desired state.
     [bool] Test() {
-        $item = Invoke-QlikGet "/qrs/odagservice/full"
+        $item = (Invoke-QlikGet "/qrs/odagservice/full").settings
 
         if ($this.AnonymousAppCleanup -ne $item.AnonymousAppCleanup) { return $false }
         if ($this.DynamicViewEnabled -ne $item.DynamicViewEnabled) { return $false }
