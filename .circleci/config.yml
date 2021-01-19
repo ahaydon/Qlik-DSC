@@ -38,9 +38,10 @@ jobs:
               Write-Error "Module version must be newer than published version"
             }
       - persist_to_workspace:
-          root: modules
+          root: .
           paths:
-            - QlikResources
+            - modules/QlikResources
+            - .package
       - store_artifacts:
           path: .package/QlikResources.zip
           destination: QlikResources.zip
