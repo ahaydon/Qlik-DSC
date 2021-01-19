@@ -1,42 +1,104 @@
 version: 2
 jobs:
-  deploy:
-    working_directory: ~/QlikResources
+  build:
     docker:
-      - image: microsoft/powershell:ubuntu-16.04
+      - image: mcr.microsoft.com/powershell:lts-ubuntu-18.04
     steps:
+      - run:
+          name: Install Git
+          command: apt-get update && apt-get install -y git
       - checkout
+      - run:
+          name: Install Psake
+          shell: /usr/bin/pwsh
+          command: |
+            $ProgressPreference = 'SilentlyContinue'
+            Install-Module -Name Psake -Force
       - run:
           name: Install module dependencies
           shell: /usr/bin/pwsh
           command: |
             $ProgressPreference = 'SilentlyContinue'
             (Import-LocalizedData -BaseDirectory (Get-Location).Path -FileName QlikResources.psd1).RequiredModules.ForEach({
+              Write-Information "Installing $_" -InformationAction Continue
               Install-Module -Name $_ -Force
             })
       - run:
-          name: Check version has been incremented in manifest
+          name: Build
           shell: /usr/bin/pwsh
           command: |
-            if ((Test-ModuleManifest -Path ./QlikResources.psd1).Version -le (Find-Module -Name QlikResources).Version) {
+            $ProgressPreference = 'SilentlyContinue'
+            Invoke-psake -taskList Package -parameters @{version="$($env:CIRCLE_TAG.Substring(1))"}
+      - run:
+          name: Check version is later than any published version
+          shell: /usr/bin/pwsh
+          command: |
+            $ProgressPreference = 'SilentlyContinue'
+            if ((Test-ModuleManifest -Path ./modules/QlikResources/QlikResources.psd1).Version -le (Find-Module -Name QlikResources).Version) {
               Write-Error "Module version must be newer than published version"
             }
-      - run:
-          name: Install .Net Core SDK
-          command: |
-            apt-get update
-            apt-get install -y dotnet-sdk-2.1.4
+      - persist_to_workspace:
+          root: modules
+          paths:
+            - QlikResources
+      - store_artifacts:
+          path: .package/QlikResources.zip
+          destination: QlikResources.zip
+
+  publish-powershell-gallery:
+    working_directory: /workspace/QlikResources
+    docker:
+      - image: mcr.microsoft.com/dotnet/sdk:3.1
+    steps:
+      - attach_workspace:
+          at: /workspace
       - run:
           name: Publish module to PowerShell Gallery
           shell: /usr/bin/pwsh
           command: Publish-Module -Path ./ -NuGetApiKey $env:PSG_API_KEY -Verbose
 
+  publish-github-release:
+    working_directory: /workspace/QlikResources
+    docker:
+      - image: cibuilds/github:latest
+    steps:
+      - attach_workspace:
+          at: /workspace
+      - run:
+          name: Publish release on GitHub
+          command: |
+            ghr -t ${GITHUB_TOKEN} \
+                -u ${CIRCLE_PROJECT_USERNAME} \
+                -r ${CIRCLE_PROJECT_REPONAME} \
+                -c ${CIRCLE_SHA1} \
+                -replace \
+                ${CIRCLE_TAG} \
+                /workspace/.package/QlikResources.zip
+
 workflows:
   version: 2
-  test-and-deploy:
+  build-and-deploy:
     jobs:
-      - deploy:
+      - build:
           filters:
             branches:
-              only: master
+              ignore: /.*/
+            tags:
+              only: /^v\d+\.\d+\.\d+$/
           context: powershell-gallery
+      - publish-powershell-gallery:
+          requires:
+            - build
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /^v\d+\.\d+\.\d+$/
+      - publish-github-release:
+          requires:
+            - build
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /^v\d+\.\d+\.\d+.*/

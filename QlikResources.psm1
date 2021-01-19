@@ -11,6 +11,14 @@ enum ReloadOn
   Update
 }
 
+enum authenticationMethod {
+    Ticket = 0
+    Static = 1
+    Dynamic = 2
+    SAML = 3
+    JWT = 4
+}
+
 [DscResource()]
 class QlikApp{
 
@@ -951,7 +959,6 @@ class QlikNode{
 
     if($this.ensure -eq [Ensure]::Present)
     {
-      Write-Verbose "Proxy should be $($this.Proxy)"
       $params = @{
         engineEnabled = $this.Engine
         proxyEnabled = $this.Proxy
@@ -969,6 +976,21 @@ class QlikNode{
         if(-not $this.hasProperties($item))
         {
           Update-QlikNode -id $item.id @params
+        }
+        $counter = 0
+        while (Get-QlikServiceStatus -full -filter "serverNodeConfiguration.id eq $($item.id) and serviceType eq Repository and serviceState eq NoCommunication") {
+            $counter++
+            if ($counter -gt 20) { throw "Repository service status is NoCommunication" }
+            Start-Sleep -Seconds 15
+        }
+        if ($state = Get-QlikServiceStatus -full -filter "serverNodeConfiguration.id eq $($item.id) and serviceType eq Repository and serviceState ne Running") {
+            Write-Verbose "Repository service status is $($state.serviceState)"
+            $password = Invoke-QlikGet "/qrs/servernoderegistration/start/$($item.id)"
+            if ($password) {
+                Write-Verbose "Unlocking certificates on node"
+                $postParams = @{__pwd = "$password" }
+                Invoke-WebRequest -Uri "http://localhost:4570/certificateSetup" -Method Post -Body $postParams -UseBasicParsing > $null
+            }
         }
       }
       else
@@ -991,6 +1013,10 @@ class QlikNode{
       if($present) {
         if($this.hasProperties($item))
         {
+          if ($state = Get-QlikServiceStatus -full -filter "serverNodeConfiguration.id eq $($item.id) and serviceType eq Repository and serviceState ne Running") {
+            Write-Verbose "Repository service status is $($state.serviceState)"
+            return $false
+          }
           return $true
         } else {
           return $false
@@ -1619,7 +1645,7 @@ class QlikVirtualProxy{
         SessionCookieHeaderName = $this.SessionCookieHeaderName
       }
       If( $this.Prefix.Trim('/') ) { $params.Add("prefix", $this.Prefix.Trim('/')) }
-      If( @($engines).Count -ne @($item.loadBalancingServerNodes).Count ) { $params.Add("loadBalancingServerNodes", $engines) }
+      If( @($engines).Count -ne $item.loadBalancingServerNodes.Count ) { $params.Add("loadBalancingServerNodes", $engines) }
       If( $this.websocketCrossOriginWhiteList ) { $params.Add("websocketCrossOriginWhiteList", $this.websocketCrossOriginWhiteList) }
       If( $this.additionalResponseHeaders ) { $params.Add("additionalResponseHeaders", $this.additionalResponseHeaders) }
       If( $this.authenticationModuleRedirectUri ) { $params.Add("authenticationModuleRedirectUri", $this.authenticationModuleRedirectUri) }
@@ -1784,32 +1810,25 @@ class QlikVirtualProxy{
     }
 
     if($this.authenticationMethod) {
-        $authenticationMethodCode = switch ($this.authenticationMethod) {
-            'ticket'  { 0 }
-            'static'  { 1 }
-            'dynamic' { 2 }
-            'saml'    { 3 }
-            'jwt'     { 4 }
-        }
-        If($authenticationMethodCode -ne $item.authenticationMethod) {
-            Write-Verbose "Test-HasProperties: authenticationMethod - $($item.authenticationMethod) does not match desired state - $authenticationMethodCode"
+        If([authenticationMethod]$this.authenticationMethod -ne [authenticationMethod]$item.authenticationMethod) {
+            Write-Verbose "Test-HasProperties: authenticationMethod - $($item.authenticationMethod) does not match desired state - $($this.authenticationMethod)"
             return $false
         }
     }
 
     if($this.loadBalancingServerNodes) {
-      $nodes = Get-QlikNode -filter $this.loadBalancingServerNodes | foreach { $_.id } | ? { $_ }
-      if(@($nodes).Count -ne @($item.loadBalancingServerNodes).Count) {
-        Write-Verbose "Test-HasProperties: loadBalancingServerNodes property count - $(@($item.loadBalancingServerNodes).Count) does not match desired state - $(@($nodes).Count)"
-        return $false
-      } else {
-        foreach($value in $item.loadBalancingServerNodes) {
-          if($nodes -notcontains $value.id) {
-            Write-Verbose "Test-HasProperties: loadBalancingServerNodes property value - $($value) not found in desired state"
+        $nodes = Get-QlikNode -filter $this.loadBalancingServerNodes | foreach { $_.id } | ? { $_ }
+        $configured = [pscustomobject[]]$item.loadBalancingServerNodes
+        if ($nodes.Count -ne $configured.Count) {
+            Write-Verbose "Test-HasProperties: loadBalancingServerNodes property count - $($configured.Count) does not match desired state - $(@($nodes).Count)"
             return $false
-          }
         }
-      }
+        if ($nodes.Count -ne 0 -and $configured.Count -ne 0) {
+            if (($diffs = Compare-Object $nodes $configured.id).Length -ne 0) {
+                Write-Verbose "Test-HasProperties: loadBalancingServerNodes has $($diffs.Length) differences"
+                return $false
+            }
+        }
     }
 
     if($this.websocketCrossOriginWhiteList) {
@@ -1839,20 +1858,34 @@ class QlikVirtualProxy{
     }
 
     if($this.samlAttributeMapMandatory -Or $this.samlAttributeMapOptional) {
-      foreach($attr in @($this.samlAttributeMapMandatory + $this.samlAttributeMapOptional)) {
-        $found = $false
-        foreach($existing in $item.samlAttributeMap) {
-          if (($attr.samlAttribute -eq $existing.samlAttribute) -And
-            (($attr.senseAttribute -eq $existing.senseAttribute) -And
-            ($attr.isMandatory -eq $existing.isMandatory))) {
-            $found = $true
-          }
+        foreach ($attr in $this.samlAttributeMapMandatory.Keys) {
+            $found = $false
+            foreach($existing in $item.samlAttributeMap) {
+                if (($attr -eq $existing.samlAttribute) -And
+                    (($this.samlAttributeMapMandatory.$attr -eq $existing.senseAttribute) -And
+                    ($existing.isMandatory -eq $true))) {
+                    $found = $true
+                }
+            }
+            if (! $found) {
+                Write-Verbose "Test-HasProperties: No match found for mandatory SAML attribute $($attr.samlAttribute)"
+                return $false
+            }
         }
-        if (! $found) {
-          Write-Verbose "Test-HasProperties: No match found for SAML attribute $($attr.samlAttribute)"
-          return $false
+        foreach ($attr in $this.samlAttributeMapOptional.Keys) {
+            $found = $false
+            foreach($existing in $item.samlAttributeMap) {
+                if (($attr -eq $existing.samlAttribute) -And
+                    (($this.samlAttributeMapOptional.$attr -eq $existing.senseAttribute) -And
+                    ($existing.isMandatory -eq $false))) {
+                    $found = $true
+                }
+            }
+            if (! $found) {
+                Write-Verbose "Test-HasProperties: No match found for optional SAML attribute $($attr.samlAttribute)"
+                return $false
+            }
         }
-      }
     }
 
     return $true
@@ -1897,11 +1930,73 @@ class QlikEngine {
     [DscProperty()]
     [Bool]$StandardReload
 
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$auditActivityLogVerbosity
+
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$auditSecurityLogVerbosity
+
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$systemLogVerbosity
+
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$externalServicesLogVerbosity
+
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$qixPerformanceLogVerbosity
+
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$serviceLogVerbosity
+
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$httpTrafficLogVerbosity
+
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$auditLogVerbosity
+
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$trafficLogVerbosity
+
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$sessionLogVerbosity
+
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$performanceLogVerbosity
+
+    [DscProperty()]
+    [ValidateRange(0, 5)]
+    [int]$sseLogVerbosity
+
     [Void] Set () {
         Write-Verbose "Get Qlik Engine: $($this.Node)"
         $item = Get-QlikEngine -Full -Filter "serverNodeConfiguration.hostName eq '$($this.Node)'"
         if($item.id) {
-            $engparams = @{ "id" = $item.id }
+            $engparams = @{
+                "id" = $item.id
+                auditActivityLogVerbosity = $this.auditActivityLogVerbosity
+                auditSecurityLogVerbosity = $this.auditSecurityLogVerbosity
+                systemLogVerbosity = $this.systemLogVerbosity
+                externalServicesLogVerbosity = $this.externalServicesLogVerbosity
+                qixPerformanceLogVerbosity = $this.qixPerformanceLogVerbosity
+                serviceLogVerbosity = $this.serviceLogVerbosity
+                httpTrafficLogVerbosity = $this.httpTrafficLogVerbosity
+                auditLogVerbosity = $this.auditLogVerbosity
+                trafficLogVerbosity = $this.trafficLogVerbosity
+                sessionLogVerbosity = $this.sessionLogVerbosity
+                performanceLogVerbosity = $this.performanceLogVerbosity
+                sseLogVerbosity = $this.sseLogVerbosity
+            }
             if($this.DocumentDirectory) { $engparams.Add("documentDirectory", $this.DocumentDirectory) }
             if($this.DocumentTimeout) { $engparams.Add("documentTimeout", $this.DocumentTimeout) }
             if($this.MinMemUsage) { $engparams.Add("workingSetSizeLoPct", $this.MinMemUsage) }
@@ -2009,6 +2104,24 @@ class QlikEngine {
         if($PSBoundParameters.ContainsKey('StandardReload') -And ($item.settings.standardReload -ne $this.StandardReload)) {
             Write-Verbose "Test-HasProperties: Standard reload property value - $($item.settings.standardReload) does not match desired state - $($this.StandardReload)"
             $desiredState = $false
+        }
+        $logLevels = @(
+            'auditActivityLogVerbosity',
+            'auditSecurityLogVerbosity',
+            'systemLogVerbosity',
+            'externalServicesLogVerbosity',
+            'qixPerformanceLogVerbosity',
+            'serviceLogVerbosity',
+            'httpTrafficLogVerbosity',
+            'auditLogVerbosity',
+            'trafficLogVerbosity',
+            'sessionLogVerbosity',
+            'performanceLogVerbosity',
+            'sseLogVerbosity'
+        )
+        if (-Not (CompareProperties $this $item.settings $logLevels))
+        {
+          return $false
         }
         return $desiredState
     }
@@ -2173,9 +2286,18 @@ class QlikServiceCluster{
   [DscProperty()]
   [string] $ArchivedLogsRootFolder
 
+  [DscProperty()]
+  [string] $EncryptionKeyThumbprint
+
+  [DscProperty()]
+  [bool] $EnableEncryptQvf
+
+  [DscProperty()]
+  [bool] $EnableEncryptQvd
+
   [void] Set()
   {
-    $item = Get-QlikServiceCluster -filter "name eq '$($this.Name)'" -raw
+    $item = Get-QlikServiceCluster -filter "name eq '$($this.Name)'" -raw -full
     $present = $item -ne $null
 
     if ($this.ensure -eq [Ensure]::Present)
@@ -2196,6 +2318,10 @@ class QlikServiceCluster{
         if ($this.Connector32RootFolder) { $params.Add("connector32RootFolder", $this.Connector32RootFolder) }
         if ($this.Connector64RootFolder) { $params.Add("connector64RootFolder", $this.Connector64RootFolder) }
         if ($this.ArchivedLogsRootFolder) { $params.Add("archivedLogsRootFolder", $this.ArchivedLogsRootFolder) }
+        if ($this.EncryptionKeyThumbprint) { $params.Add("encryptionKeyThumbprint", $this.EncryptionKeyThumbprint) }
+        $params.Add("enableEncryptQvf", $this.EnableEncryptQvf)
+        $params.Add("enableEncryptQvd", $this.EnableEncryptQvd)
+
         Update-QlikServiceCluster @params
       }
     }
@@ -2211,7 +2337,7 @@ class QlikServiceCluster{
 
   [bool] Test()
   {
-    $item = Get-QlikServiceCluster -filter "name eq '$($this.Name)'" -raw
+    $item = Get-QlikServiceCluster -filter "name eq '$($this.Name)'" -raw -full
     $present = $item -ne $null
 
     if ($this.Ensure -eq [Ensure]::Present)
@@ -2241,10 +2367,21 @@ class QlikServiceCluster{
 
   [QlikServiceCluster] Get()
   {
-    $item = Get-QlikServiceCluster -filter "name eq '$($this.Name)'" -raw
+    $item = Get-QlikServiceCluster -filter "name eq '$($this.Name)'" -raw -full
     if ($item -ne $null)
     {
       $this.Ensure = [Ensure]::Present
+      $this.PersistenceType = $item.settings.PersistenceType
+      $this.PersistenceMode = $item.settings.PersistenceMode
+      $this.RootFolder = $item.settings.RootFolder
+      $this.AppFolder = $item.settings.AppFolder
+      $this.StaticContentRootFolder = $item.settings.StaticContentRootFolder
+      $this.Connector32RootFolder = $item.settings.Connector32RootFolder
+      $this.Connector64RootFolder = $item.settings.Connector64RootFolder
+      $this.ArchivedLogsRootFolder = $item.settings.ArchivedLogsRootFolder
+      $this.EncryptionKeyThumbprint = $item.settings.encryption.EncryptionKeyThumbprint
+      $this.EnableEncryptQvf = $item.settings.encryption.EnableEncryptQvf
+      $this.EnableEncryptQvd = $item.settings.encryption.EnableEncryptQvd
     }
     else
     {
@@ -2261,6 +2398,10 @@ class QlikServiceCluster{
       return $false
     }
     if (-Not (CompareProperties $this $item.settings.sharedPersistenceProperties @('rootFolder', 'appFolder', 'staticContentRootFolder', 'connector32RootFolder', 'connector64RootFolder', 'archivedLogsRootFolder')))
+    {
+      return $false
+    }
+    if (-Not (CompareProperties $this $item.settings.encryption @('encryptionKeyThumbprint', 'enableEncryptQvf', 'enableEncryptQvd')))
     {
       return $false
     }
@@ -2578,7 +2719,7 @@ $(if ($this.InstallLocalDb) { $spc_db })
                 $spc | Out-File -FilePath "$env:temp\spc.cfg"
                 [String]$parsedSetupParams += " spc=`"$env:temp\spc.cfg`""
             }
-            Write-Verbose "Starting `"$($this.Setup)`" $parsedSetupParams"
+            Write-Verbose "Starting `"$($this.Setup)`" $($parsedSetupParams -replace '(?<=password=")([^"]*)', '****')"
             $startInfo = New-Object System.Diagnostics.ProcessStartInfo
             $startInfo.UseShellExecute = $false #Necessary for I/O redirection and just generally a good idea
             $process = New-Object System.Diagnostics.Process
