@@ -86,8 +86,8 @@ workflows:
               ignore: /.*/
             tags:
               only: /^v\d+\.\d+\.\d+$/
-          context: powershell-gallery
       - publish-powershell-gallery:
+          context: powershell-gallery
           requires:
             - build
           filters:
@@ -96,6 +96,7 @@ workflows:
             tags:
               only: /^v\d+\.\d+\.\d+$/
       - publish-github-release:
+          context: github
           requires:
             - build
           filters:
