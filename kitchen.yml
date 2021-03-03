@@ -1,0 +1,75 @@
+---
+driver:
+  name: vagrant
+  linked_clone: true
+  vm_hostname: sense-cn
+  provision: true
+  vagrantfiles:
+    - kitchen/vagrant_windows_bootstrap.rb
+
+lifecycle:
+  pre_converge:
+    - pwsh -Command "Invoke-psake Build -parameters @{version='1.99.999-alpha1'}"
+
+provisioner:
+  name: dsc
+  configuration_name: default
+  dsc_local_configuration_manager_version: wmf5
+  dsc_local_configuration_manager:
+    reboot_if_needed: true
+    configuration_mode: 'ApplyOnly'
+  configuration_data:
+    AllNodes:
+      - NodeName: sense-cn
+        PSDscAllowPlainTextPassword: true
+        PSDscAllowDomainUser: true
+      - NodeName: sense-rim1
+        PSDscAllowPlainTextPassword: true
+        PSDscAllowDomainUser: true
+  modules_from_gallery:
+    - xSmbShare
+    - xPSDesiredStateConfiguration
+    - xNetworking
+    - name: Qlik-Cli
+      requiredversion: 1.21.0
+    
+verifier:
+  name: pester
+  test_folder: tests/integration
+  pester_install:
+    # Version 5 and later does no yet work with test kitchen
+    MaximumVersion: '4.99.999'
+  bootstrap:
+    repository_url: https://www.powershellgallery.com/api/v2
+    modules:
+      - PackageManagement
+      - PowerShellGet
+
+platforms:
+  - name: windows-2019
+    os_type: windows
+    shell: powershell
+    transport:
+      name: winrm
+    driver:
+      box: qlik/win2k19
+      vm_hostname: sense-cn
+    driver_config:
+      network:
+        - ["forwarded_port", {guest: 443, host: 8443, auto_correct: true}]
+        - ["forwarded_port", {guest: 4242, host: 4242, auto_correct: true}]
+  - name: windows-2016
+    os_type: windows
+    shell: powershell
+    transport:
+      name: winrm
+    driver:
+      box: qlik/win2k16
+      vm_hostname: sense-cn
+    driver_config:
+      network:
+        - ["forwarded_port", {guest: 443, host: 8443, auto_correct: true}]
+        - ["forwarded_port", {guest: 4242, host: 4242, auto_correct: true}]
+
+suites:
+  - name: default

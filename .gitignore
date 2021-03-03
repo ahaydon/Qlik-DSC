@@ -1,2 +1,5 @@
 .vagrant
 *.log
+modules/
+.kitchen/
+.package/

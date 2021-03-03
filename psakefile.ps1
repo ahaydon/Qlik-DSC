@@ -4,6 +4,45 @@ Properties {
     $pkg_path = ".package"
 }
 
+Task PSRemote {
+    $script:instances = @()
+    $instance_port = @{}
+    $instance_files = Get-ChildItem -Path ./.kitchen/ -Filter *.yml
+    foreach ($file in $instance_files) {
+        [int]$port = (Select-String -Path $file -Pattern "^port: '(\d+)'").Matches[0].Groups[1].Value
+        $instance_port.Add($file.BaseName, $port + 1)
+    }
+
+    foreach ($instance in $instance_port.Keys) {
+        $session_name = "kitchen_$instance"
+        if ($session = Get-PSSession -Name $session_name -ErrorAction SilentlyContinue) {
+            if ($session.State -ne 'Opened') {
+                Remove-PSSession -Session $session
+            }
+            else {
+                $script:instances += $session
+                Continue
+            }
+        }
+
+        $password = ConvertTo-SecureString -String 'vagrant' -AsPlainText -Force
+        $vagrant_cred = New-Object System.Management.Automation.PSCredential('vagrant', $password)
+        $so = New-PSSessionOption -SkipCACheck -SkipCNCheck
+        Write-Information "$instance`: $($instance_port[$instance])" -InformationAction Continue
+        $session = New-PSSession `
+            -Name $session_name `
+            -ComputerName localhost `
+            -Credential $vagrant_cred `
+            -EnableNetworkAccess `
+            -Port $instance_port[$instance] `
+            -UseSSL `
+            -SessionOption $so `
+            -Authentication Basic
+        $script:instances += $session
+        Set-Variable -Name $session_name -Value $session -Scope Global
+    }
+}
+
 Task Clean {
     if (Test-Path $output) {
         Remove-Item $output -Force -Recurse

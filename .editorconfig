@@ -1,0 +1,16 @@
+root = true
+
+[*]
+end_of_line = lf
+insert_final_newline = true
+charset = utf-8
+indent_style = space
+indent_size = 4
+
+[*.{yaml,yml}]
+indent_size = 2
+
+[*.{ps1,psm1,psd1}]
+# charset does not currently work with vs-code
+# PS files must be utf-8-bom or they are ignored by Pester
+charset = utf-8-bom

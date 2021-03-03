@@ -177,6 +177,7 @@ Configuration QlikCentral
       Direction             = "InBound"
       LocalPort             = ("4432")
       Protocol              = "TCP"
+      DependsOn             = "[QlikPackage]Sense_Setup"
     }
 
     xFirewall QRS
@@ -191,6 +192,7 @@ Configuration QlikCentral
       Direction             = "InBound"
       LocalPort             = ("4242")
       Protocol              = "TCP"
+      DependsOn             = "[QlikPackage]Sense_Setup"
     }
 
     xFirewall QPS
@@ -205,6 +207,7 @@ Configuration QlikCentral
       Direction             = "InBound"
       LocalPort             = ("443")
       Protocol              = "TCP"
+      DependsOn             = "[QlikPackage]Sense_Setup"
     }
 
     xFirewall QPS-Auth
@@ -219,6 +222,7 @@ Configuration QlikCentral
       Direction             = "InBound"
       LocalPort             = ("4244")
       Protocol              = "TCP"
+      DependsOn             = "[QlikPackage]Sense_Setup"
     }
   }
 }
