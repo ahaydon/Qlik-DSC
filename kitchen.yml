@@ -13,7 +13,6 @@ lifecycle:
 
 provisioner:
   name: dsc
-  configuration_name: default
   dsc_local_configuration_manager_version: wmf5
   dsc_local_configuration_manager:
     reboot_if_needed: true
@@ -21,9 +20,6 @@ provisioner:
   configuration_data:
     AllNodes:
       - NodeName: sense-cn
-        PSDscAllowPlainTextPassword: true
-        PSDscAllowDomainUser: true
-      - NodeName: sense-rim1
         PSDscAllowPlainTextPassword: true
         PSDscAllowDomainUser: true
   modules_from_gallery:
@@ -53,7 +49,6 @@ platforms:
       name: winrm
     driver:
       box: qlik/win2k19
-      vm_hostname: sense-cn
     driver_config:
       network:
         - ["forwarded_port", {guest: 443, host: 8443, auto_correct: true}]
@@ -65,7 +60,6 @@ platforms:
       name: winrm
     driver:
       box: qlik/win2k16
-      vm_hostname: sense-cn
     driver_config:
       network:
         - ["forwarded_port", {guest: 443, host: 8443, auto_correct: true}]
