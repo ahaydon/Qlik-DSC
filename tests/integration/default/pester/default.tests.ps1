@@ -23,8 +23,8 @@ Describe 'Qlik Sense installation' {
     it 'Should have the correct release and patch' {
         $products = (Get-ItemProperty 'HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*').DisplayName
 
-        $products | Should -Contain 'Qlik Sense November 2020'
-        $products | Should -Contain 'Qlik Sense November 2020 Patch 3'
+        $products | Should -Contain 'Qlik Sense February 2021'
+        $products | Should -Contain 'Qlik Sense February 2021 Patch 1'
     }
 }
 

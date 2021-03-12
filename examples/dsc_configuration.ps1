@@ -4,8 +4,8 @@ $DbCredential = New-Object System.Management.Automation.PSCredential("qliksenser
 $password = ConvertTo-SecureString -String 'vagrant' -AsPlainText -Force
 $QlikAdmin = New-Object System.Management.Automation.PSCredential("sense-cn\vagrant", $password)
 $CachePath = 'C:\kitchen-cache'
-$SenseRelease = 'November 2020'
-$SensePatch = 3
+$SenseRelease = 'February 2021'
+$SensePatch = 1
 $SetupPath = "$CachePath\Qlik Sense $SenseRelease\Qlik_Sense_setup.exe"
 $UpdatePath = "$CachePath\Qlik Sense $SenseRelease Patch $SensePatch\Qlik_Sense_update.exe"
 $Hostname = ([System.Net.Dns]::GetHostEntry('localhost')).hostname
@@ -51,9 +51,9 @@ Configuration Default {
 
         xRemoteFile SenseSetup {
             DestinationPath = $SetupPath
-            Uri             = 'https://da3hntz84uekx.cloudfront.net/QlikSense/13.102/0/_MSI/Qlik_Sense_setup.exe'
+            Uri             = 'https://da3hntz84uekx.cloudfront.net/QlikSense/14.5/0/_MSI/Qlik_Sense_setup.exe'
             ChecksumType    = 'SHA256'
-            Checksum        = 'c861d594db361fbb31150c7597196347b7974fe4102cb11d8b75541082b1345a'
+            Checksum        = '2362399C6152E47EED72A2F7B84E8AF4E21E760299BBE6F139A25930A615EECD'
             MatchSource     = $false
             DependsOn       = '[File]Cache'
         }
@@ -61,9 +61,9 @@ Configuration Default {
         if ($SensePatch -gt 0) {
             xRemoteFile SenseUpdate {
                 DestinationPath = $UpdatePath
-                Uri             = 'https://da3hntz84uekx.cloudfront.net/QlikSense/13.102/3/_MSI/Qlik_Sense_update.exe'
+                Uri             = 'https://da3hntz84uekx.cloudfront.net/QlikSense/14.5/1/_MSI/Qlik_Sense_update.exe'
                 ChecksumType    = 'SHA256'
-                Checksum        = '4805463C9B8B857B5F865C6A65FE51C27F556CEAB8897C9E2CF02BEA5958C2E0'
+                Checksum        = '299C679C2750B3E360CF291CC9E3A9A3AD70D57E9F742E6CEC547E80EC65DB94'
                 MatchSource     = $false
                 DependsOn       = '[File]Cache'
             }
