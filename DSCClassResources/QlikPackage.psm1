@@ -112,7 +112,7 @@ class QlikPackage {
 
     [DscProperty()]
     [ValidateSet('Dashboard', 'Visualization')]
-    [string]$BundleInstall
+    [string[]]$BundleInstall
 
     [DscProperty()]
     [string] $SpcFilePath = "$env:temp\spc.cfg"
@@ -193,7 +193,7 @@ class QlikPackage {
             $product = (Get-FileInfo $this.Setup).ProductName
             Write-Debug "Installed: $($packages.ProductName)"
             Write-Debug "Desired: $product"
-            if($packages.ProductName -ne $product) {
+            if($packages.ProductName -ne $product -and $packages.PatchName -ne $product) {
                 Write-Verbose "Package $product not installed."
                 return $false
             }
@@ -286,7 +286,7 @@ function Install-QlikPackage {
         [System.IO.FileInfo]$DatabaseDumpFile,
         [Parameter(ValueFromPipelineByPropertyName = $true)]
         [ValidateSet('Dashboard', 'Visualization')]
-        [string]$BundleInstall,
+        [string[]]$BundleInstall,
         [Parameter()]
         [switch]$CleanUp
     )
@@ -400,14 +400,17 @@ function New-QlikSharedPersistenceConfiguration {
     )
 
     process {
-        if ($PSCmdlet.ParameterSetName -eq 'CreateCluster') {
-            foreach ($item in @('AppsDir', 'StaticContentRootDir', 'ArchivedLogsDir')) {
+        foreach ($item in @('AppsDir', 'StaticContentRootDir', 'ArchivedLogsDir')) {
+            if ($PSCmdlet.ParameterSetName -eq 'CreateCluster') {
                 $value = Get-Variable -Name $item -ValueOnly
                 if (! [System.IO.Path]::IsPathRooted($value)) {
                     $value = $RootDir.TrimEnd('\') + "\$value"
                     Set-Variable $item $value
                     Write-Verbose "$item path not rooted, resolving to $value"
                 }
+            }
+            else {
+                Set-Variable $item $null
             }
         }
 
@@ -433,9 +436,12 @@ function New-QlikSharedPersistenceConfiguration {
                     $xmlWriter.WriteElementString($parameter, $value.ToString().ToLower())
                 }
                 'PSCredential' {
-                    $name = $parameter.TrimEnd('Credential')
-                    $xmlWriter.WriteElementString($name + 'UserName', $value.UserName)
-                    $xmlWriter.WriteElementString($name + 'UserPassword', $value.GetNetworkCredential().Password)
+                    if ($parameter.SubString($parameter.Length - 10) -eq 'Credential') {
+                        $name = $parameter.TrimEnd('Credential')
+                        $xmlWriter.WriteElementString($name + 'UserName', $value.UserName)
+                        $parameter = $name + 'UserPassword'
+                    }
+                    $xmlWriter.WriteElementString($parameter, $value.GetNetworkCredential().Password)
                 }
                 default {
                     $xmlWriter.WriteElementString($parameter, $value)

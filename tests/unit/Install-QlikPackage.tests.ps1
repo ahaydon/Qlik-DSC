@@ -31,7 +31,7 @@ Describe "Install-QlikPackage" {
                 $password = ConvertTo-SecureString -String 'password' -AsPlainText -Force
                 $credential = New-Object System.Management.Automation.PSCredential('.\qservice', $password)
                 Install-QlikPackage `
-                    -Path 'foo.exe' `
+                    -Path 'Qlik_Sense_setup.exe' `
                     -SharedPersistenceConfig TestDrive:/spc.cfg `
                     -AcceptEula `
                     -ServiceCredential $credential `
@@ -51,7 +51,7 @@ Describe "Install-QlikPackage" {
                 $install = {
                     $credential = New-Object System.Management.Automation.PSCredential('.\qservice', $password)
                     Install-QlikPackage `
-                        -Path 'foo.exe' `
+                        -Path 'Qlik_Sense_setup.exe' `
                         -SharedPersistenceConfig TestDrive:/spc.cfg `
                         -AcceptEula `
                         -ServiceCredential $credential `
@@ -87,7 +87,7 @@ Describe "Install-QlikPackage" {
                 $password = ConvertTo-SecureString -String 'password' -AsPlainText -Force
                 $credential = New-Object System.Management.Automation.PSCredential('.\qservice', $password)
                 Install-QlikPackage `
-                    -Path 'foo.exe' `
+                    -Path 'Qlik_Sense_setup.exe' `
                     -AcceptEula `
                     -ServiceCredential $credential `
                     -DbPassword $credential
@@ -109,7 +109,7 @@ Describe "Install-QlikPackage" {
 
             It 'Should pass arguments to the update process' {
                 Install-QlikPackage `
-                    -Path 'foo.exe' 
+                    -Path 'Qlik_Sense_setup.exe' 
 
                 $proc.StartInfo.Arguments | Should -Be 'install startservices'
             }
