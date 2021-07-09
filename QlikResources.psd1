@@ -55,7 +55,8 @@ RequiredModules = @('Qlik-Cli', 'xNetworking', 'xPSDesiredStateConfiguration', '
 # FormatsToProcess = @()
 
 # Modules to import as nested modules of the module specified in RootModule/ModuleToProcess
-NestedModules = @('DSCClassResources/WaitForQlikResource.psm1', 'DSCClassResources/QlikOdag.psm1')
+NestedModules = @('./DSCClassResources/WaitForQlikResource.psm1', './DSCClassResources/QlikOdag.psm1',
+    './DSCClassResources/QlikPackage.psm1', './DSCClassResources/QlikProxy.psm1', './Private/Common.psm1')
 
 # Functions to export from this module
 FunctionsToExport = ''
