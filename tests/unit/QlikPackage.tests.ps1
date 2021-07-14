@@ -6,11 +6,15 @@ Import-Module $modulePath -Force
 InModuleScope QlikPackage {
     Describe "QlikPackage" {
         BeforeAll {
-            Mock Get-FileInfo -ParameterFilter { Write-Debug "MockPath: $Path"; $Path -eq 'TestDrive:\Qlik_Sense_setup.exe'} {
+            Mock Get-FileInfo -ParameterFilter { $Path -eq "$TestDrive\Qlik_Sense_setup.exe"} {
                 @{OriginalFilename = 'Qlik_Sense_setup.exe'; ProductName = 'Qlik Sense November 2020'}
             }
-            Mock Get-FileInfo -ParameterFilter { $Path -eq 'TestDrive:\Qlik_Sense_update.exe'} {
+            Mock Get-FileInfo -ParameterFilter { $Path -eq "$TestDrive\Qlik_Sense_update.exe"} {
                 @{OriginalFilename = 'Qlik_Sense_update.exe'; ProductName = 'Qlik Sense November 2020 Patch 1'}
+            }
+            Mock Get-FileInfo {
+                Write-Host $Path
+                Write-Host $TestDrive
             }
         }
 
@@ -21,7 +25,7 @@ InModuleScope QlikPackage {
                 }
 
                 It 'Should return false' {
-                    $pkg = [QlikPackage]@{ Setup = 'TestDrive:\Qlik_Sense_setup.exe'; Ensure = 'Present' }
+                    $pkg = [QlikPackage]@{ Setup = "$TestDrive\Qlik_Sense_setup.exe"; Ensure = 'Present' }
                     $pkg.Test() | Should -BeFalse
                     Assert-VerifiableMock
                 }
@@ -33,7 +37,7 @@ InModuleScope QlikPackage {
                 }
 
                 It 'Should return true' {
-                    $pkg = [QlikPackage]@{ Setup = 'TestDrive:\Qlik_Sense_setup.exe'; Ensure = 'Present' }
+                    $pkg = [QlikPackage]@{ Setup = "$TestDrive\Qlik_Sense_setup.exe"; Ensure = 'Present' }
                     $pkg.Test() | Should -BeTrue
                     Assert-VerifiableMock
                 }
@@ -46,8 +50,8 @@ InModuleScope QlikPackage {
 
                 It 'Should return false' {
                     $pkg = [QlikPackage]@{
-                        Setup = 'TestDrive:\Qlik_Sense_setup.exe'
-                        Patch = 'TestDrive:\Qlik_Sense_update.exe'
+                        Setup = "$TestDrive\Qlik_Sense_setup.exe"
+                        Patch = "$TestDrive\Qlik_Sense_update.exe"
                         Ensure = 'Present'
                     }
                     $pkg.Test() | Should -BeFalse
@@ -65,8 +69,8 @@ InModuleScope QlikPackage {
 
                 It 'Should return true' {
                     $pkg = [QlikPackage]@{
-                        Setup = 'TestDrive:\Qlik_Sense_setup.exe'
-                        Patch = 'TestDrive:\Qlik_Sense_update.exe'
+                        Setup = "$TestDrive\Qlik_Sense_setup.exe"
+                        Patch = "$TestDrive\Qlik_Sense_update.exe"
                         Ensure = 'Present'
                     }
                     $pkg.Test() | Should -BeTrue
@@ -80,19 +84,13 @@ InModuleScope QlikPackage {
                 BeforeAll {
                     Mock -Verifiable Get-ItemProperty
                     Mock -Verifiable Test-Path { $true }
-                    Mock -Verifiable New-QlikSharedPersistenceConfiguration { [System.IO.FileInfo]'Test-Drive:\spc.cfg' }
                     Mock -Verifiable Install-QlikPackage
-                    Mock Get-FileInfo -ParameterFilter { Write-Debug "MockPath: $Path"; $Path -eq 'TestDrive:\Qlik_Sense_setup.exe'} {
-                        @{OriginalFilename = 'Qlik_Sense_setup.exe'; ProductName = 'Qlik Sense November 2020'}
-                    }
-                    Mock Get-FileInfo -ParameterFilter { $Path -eq 'TestDrive:\Qlik_Sense_update.exe'} {
-                        @{OriginalFilename = 'Qlik_Sense_update.exe'; ProductName = 'Qlik Sense November 2020 Patch 1'}
-                    }
                     function GetQlikPackage {
                         $password = ConvertTo-SecureString -String 'password' -AsPlainText -Force
                         $credential = New-Object System.Management.Automation.PSCredential('.\qservice', $password)
-                        [QlikPackage]@{
-                            Setup               = 'TestDrive:\Qlik_Sense_setup.exe'
+                        @{
+                            Setup               = "$TestDrive\Qlik_Sense_setup.exe"
+                            SpcFilePath         = "$TestDrive\spc.cfg"
                             ServiceCredential   = $credential
                             DbSuperUserPassword = $credential
                             DbCredential        = $credential
@@ -105,14 +103,14 @@ InModuleScope QlikPackage {
                 }
 
                 It 'Should install the setup package' {
-                    $pkg = GetQlikPackage
+                    [QlikPackage]$pkg = GetQlikPackage
                     $pkg.Set()
                     Assert-VerifiableMock
                 }
 
                 It 'Should install the update package' {
-                    $pkg = GetQlikPackage
-                    $pkg.Patch = 'TestDrive:\Qlik_Sense_update.exe'
+                    [QlikPackage]$pkg = GetQlikPackage
+                    $pkg.Patch = "$TestDrive\Qlik_Sense_update.exe"
                     $pkg.Set()
                     Assert-VerifiableMock
                     Assert-MockCalled Install-QlikPackage -Times 2
@@ -128,7 +126,7 @@ InModuleScope QlikPackage {
                         $password = ConvertTo-SecureString -String 'password' -AsPlainText -Force
                         $credential = New-Object System.Management.Automation.PSCredential('.\qservice', $password)
                         [QlikPackage]@{
-                            Setup               = 'TestDrive:\Qlik_Sense_setup.exe'
+                            Setup               = "$TestDrive\Qlik_Sense_setup.exe"
                             ServiceCredential   = $credential
                             DbSuperUserPassword = $credential
                             SkipStartServices   = $true
@@ -149,19 +147,20 @@ InModuleScope QlikPackage {
                 BeforeAll {
                     Mock -Verifiable Get-ItemProperty
                     Mock -Verifiable Test-Path { $true }
-                    Mock -Verifiable New-QlikSharedPersistenceConfiguration { [System.IO.FileInfo]'Test-Drive:\spc.cfg' }
+                    # Mock -Verifiable New-QlikSharedPersistenceConfiguration { "$TestDrive\spc.cfg" }
                     Mock -Verifiable Install-QlikPackage
-                    Mock Get-FileInfo -ParameterFilter { Write-Debug "MockPath: $Path"; $Path -eq 'TestDrive:\Qlik_Sense_setup.exe'} {
-                        @{OriginalFilename = 'Qlik_Sense_setup.exe'; ProductName = 'Qlik Sense November 2020'}
-                    }
-                    Mock Get-FileInfo -ParameterFilter { $Path -eq 'TestDrive:\Qlik_Sense_update.exe'} {
-                        @{OriginalFilename = 'Qlik_Sense_update.exe'; ProductName = 'Qlik Sense November 2020 Patch 1'}
-                    }
+                    # Mock Get-FileInfo -ParameterFilter { Write-Debug "MockPath: $Path"; $Path -eq "$TestDrive\Qlik_Sense_setup.exe"} {
+                    #     @{OriginalFilename = 'Qlik_Sense_setup.exe'; ProductName = 'Qlik Sense November 2020'}
+                    # }
+                    # Mock Get-FileInfo -ParameterFilter { $Path -eq 'TestDrive:\Qlik_Sense_update.exe'} {
+                    #     @{OriginalFilename = 'Qlik_Sense_update.exe'; ProductName = 'Qlik Sense November 2020 Patch 1'}
+                    # }
                     function GetQlikPackage {
                         $password = ConvertTo-SecureString -String 'password' -AsPlainText -Force
                         $credential = New-Object System.Management.Automation.PSCredential('.\qservice', $password)
                         [QlikPackage]@{
-                            Setup               = 'TestDrive:\Qlik_Sense_setup.exe'
+                            Setup               = "$TestDrive\Qlik_Sense_setup.exe"
+                            SpcFilePath         = "$TestDrive\spc.cfg"
                             ServiceCredential   = $credential
                             DbCredential        = $credential
                             SkipStartServices   = $true

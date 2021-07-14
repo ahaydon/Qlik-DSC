@@ -4,10 +4,8 @@ Import-Module -PassThru $modulePath
 
 InModuleScope QlikProxy {
     Describe "QlikProxy" {
-        BeforeAll {
-            . (Join-Path $ProjectRoot -ChildPath 'tests' | Join-Path -ChildPath 'helpers' | Join-Path -ChildPath 'dsc_class.ps1')
-            $ResourceProperties = Get-DscProperty -Type 'QlikProxy'
-        }
+        . (Join-Path $ProjectRoot -ChildPath 'tests' | Join-Path -ChildPath 'helpers' | Join-Path -ChildPath 'dsc_class.ps1')
+        $ResourceProperties = Get-DscProperty -Type 'QlikProxy'
 
         Context 'Test' {
             Describe 'When no properties are set' {
@@ -66,18 +64,17 @@ InModuleScope QlikProxy {
 
             Describe 'When setting resource properties' {
                 BeforeAll {
-                    $properties = Get-DscProperty -Type 'QlikProxy'
                     $proxy = [QlikProxy]@{
                         Node = 'localhost'
                     }
-                    foreach ($property in $properties.GetEnumerator()) {
+                    foreach ($property in $ResourceProperties.GetEnumerator()) {
                         if ($property.Key -eq 'CustomProperties') { continue }
                         $proxy.($property.Key) = $property.Value
                     }
                     $proxy.Set()
                 }
 
-                foreach ($property in $properties.GetEnumerator()) {
+                foreach ($property in $ResourceProperties.GetEnumerator()) {
                     if ($property.Key -eq 'CustomProperties') { continue }
                     It "Should update the $($property.Key) property of the resource" {
                         Assert-MockCalled -CommandName Update-QlikProxy -ParameterFilter {
@@ -106,11 +103,10 @@ InModuleScope QlikProxy {
 
         Context 'Get' {
             BeforeAll {
-                $configured = Get-DscProperty -Type 'QlikProxy'
                 Mock Get-QlikProxy -Verifiable {
                     return @{
                         id = [guid]::NewGuid()
-                        settings = [QlikProxy]$configured
+                        settings = [QlikProxy]$ResourceProperties
                         customProperties = @{
                             value = 'Bar'
                             definition = @{ name = 'Foo' }
@@ -123,7 +119,7 @@ InModuleScope QlikProxy {
             }
 
             Describe 'When setting resource properties' {
-                foreach ($property in $configured.GetEnumerator()) {
+                foreach ($property in $ResourceProperties.GetEnumerator()) {
                     if ($property.Key -eq 'CustomProperties') { continue }
                     It "Should return the value of the $($property.Key) property" {
                         $proxy.($property.Key) | Should -Be $property.Value

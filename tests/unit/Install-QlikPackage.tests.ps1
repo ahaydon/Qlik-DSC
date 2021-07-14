@@ -32,7 +32,7 @@ Describe "Install-QlikPackage" {
                 $credential = New-Object System.Management.Automation.PSCredential('.\qservice', $password)
                 Install-QlikPackage `
                     -Path 'Qlik_Sense_setup.exe' `
-                    -SharedPersistenceConfig TestDrive:/spc.cfg `
+                    -SharedPersistenceConfig $TestDrive\spc.cfg `
                     -AcceptEula `
                     -ServiceCredential $credential `
                     -DbPassword $credential
@@ -42,7 +42,7 @@ Describe "Install-QlikPackage" {
                 $proc.StartInfo.Arguments | Should -Match 'userwithdomain=".\\qservice"'
                 $proc.StartInfo.Arguments | Should -Match 'userpassword="password"'
                 $proc.StartInfo.Arguments | Should -Match 'dbpassword="password"'
-                $proc.StartInfo.Arguments | Should -Match 'sharedpersistenceconfig="TestDrive:/spc.cfg"'
+                $proc.StartInfo.Arguments | Should -Match "sharedpersistenceconfig=`"$($TestDrive -replace '\\', '\\')\\spc.cfg`""
             }
         }
 
@@ -52,7 +52,7 @@ Describe "Install-QlikPackage" {
                     $credential = New-Object System.Management.Automation.PSCredential('.\qservice', $password)
                     Install-QlikPackage `
                         -Path 'Qlik_Sense_setup.exe' `
-                        -SharedPersistenceConfig TestDrive:/spc.cfg `
+                        -SharedPersistenceConfig $TestDrive\spc.cfg `
                         -AcceptEula `
                         -ServiceCredential $credential `
                         -DbPassword $credential
@@ -61,17 +61,17 @@ Describe "Install-QlikPackage" {
 
             It 'Should reject quote character in db password' {
                 $password = ConvertTo-SecureString -String 'pass"word' -AsPlainText -Force
-                $install.GetNewClosure() | Should -Throw "Cannot validate argument on parameter 'DbPassword'"
+                $install.GetNewClosure() | Should -Throw
             }
 
             It 'Should reject apostrophe character in db password' {
                 $password = ConvertTo-SecureString -String "pass'word" -AsPlainText -Force
-                $install.GetNewClosure() | Should -Throw "Cannot validate argument on parameter 'DbPassword'"
+                $install.GetNewClosure() | Should -Throw
             }
 
             It 'Should reject semicolon character in db password' {
                 $password = ConvertTo-SecureString -String 'pass;word' -AsPlainText -Force
-                $install.GetNewClosure() | Should -Throw "Cannot validate argument on parameter 'DbPassword'"
+                $install.GetNewClosure() | Should -Throw
             }
         }
     }
