@@ -12,7 +12,7 @@ jobs:
       - checkout
       - run:
           name: Install Pester
-          command: Install-Module -Name Pester -MaximumVersion '4.99.999'
+          command: Install-Module -Name Pester -MaximumVersion '4.99.999' -Force
       - run:
           name: Run Pester unit tests
           command: |
