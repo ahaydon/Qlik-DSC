@@ -6,6 +6,34 @@ executors:
     shell: /usr/bin/pwsh
 
 jobs:
+  test-unit:
+    executor: powershell
+    steps:
+      - checkout
+      - run:
+          name: Install Pester
+          command: Install-Module -Name Pester -MaximumVersion '4.99.999' -Force
+      - run:
+          name: Install Qlik-Cli
+          command: Install-Module -Name Qlik-Cli -Force
+      - run:
+          name: Run Pester unit tests
+          command: |
+            New-Item `
+              -ItemType Directory `
+              -Path /output/test-results/pester
+
+            Invoke-Pester `
+              -Script ./tests/unit/ `
+              -EnableExit `
+              -OutputFormat JUnitXml `
+              -OutputFile /output/test-results/pester/results.xml
+      - store_test_results:
+          path: /output/test-results
+      - store_artifacts:
+          path: /output/test-results
+          destination: test-results
+
   build:
     executor: powershell
     steps:
@@ -91,6 +119,7 @@ workflows:
   version: 2
   build-and-deploy:
     jobs:
+      - test-unit
       - build:
           filters:
             branches:
