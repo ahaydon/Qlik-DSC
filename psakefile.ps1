@@ -10,11 +10,17 @@ Task PSRemote {
     $instance_port = @{}
     $instance_files = Get-ChildItem -Path ./.kitchen/ -Filter *.yml
     foreach ($file in $instance_files) {
-        [int]$port = (Select-String -Path $file -Pattern "^port: '(\d+)'").Matches[0].Groups[1].Value
-        $instance_port.Add($file.BaseName, $port + 1)
+        if ($Matches = Select-String -Path $file -Pattern "^port: '(\d+)'") {
+            [int]$port = $Matches.Matches[0].Groups[1].Value
+            $instance_port.Add($file.BaseName, $port + 1)
+        }
     }
 
     foreach ($instance in $instance_port.Keys) {
+        if (Get-Command -Name Disable-WSManCertVerification -ErrorAction Ignore) {
+            Disable-WSManCertVerification -All
+        }
+
         $session_name = "kitchen_$instance"
         if ($session = Get-PSSession -Name $session_name -ErrorAction SilentlyContinue) {
             if ($session.State -ne 'Opened') {

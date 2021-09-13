@@ -20,8 +20,8 @@ jobs:
           command: |
             $ProgressPreference = 'SilentlyContinue'
             (Import-LocalizedData -BaseDirectory (Get-Location).Path -FileName QlikResources.psd1).RequiredModules.ForEach({
-              Write-Information "Installing $_" -InformationAction Continue
-              Install-Module -Name $_ -Force
+              Write-Information "Installing $($_.ModuleName) v$($_.ModuleVersion)" -InformationAction Continue
+              Install-Module -Name $_.ModuleName -RequiredVersion $_.ModuleVersion -Force
             })
       - run:
           name: Build

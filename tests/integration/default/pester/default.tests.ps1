@@ -11,11 +11,15 @@ Describe 'Cluster share' {
 }
 
 Describe 'Administrator group members' {
+    BeforeAll {
+        $Hostname = ([System.Net.Dns]::GetHostEntry('localhost')).hostname
+    }
+
     it 'Should include the Qlik admin user' {
-        (Get-LocalGroupMember -Name Administrators).Name | Should -Contain 'SENSE-CN\vagrant'
+        (Get-LocalGroupMember -Name Administrators).Name | Should -Contain "$Hostname\vagrant"
     }
     it 'Should include the Qlik service user' {
-        (Get-LocalGroupMember -Name Administrators).Name | Should -Contain 'SENSE-CN\qservice'
+        (Get-LocalGroupMember -Name Administrators).Name | Should -Contain "$Hostname\qservice"
     }
 }
 
@@ -23,8 +27,8 @@ Describe 'Qlik Sense installation' {
     it 'Should have the correct release and patch' {
         $products = (Get-ItemProperty 'HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*').DisplayName
 
-        $products | Should -Contain 'Qlik Sense February 2021'
-        $products | Should -Contain 'Qlik Sense February 2021 Patch 1'
+        $products | Should -Contain 'Qlik Sense May 2021'
+        $products | Should -Contain 'Qlik Sense May 2021 Patch 3'
     }
 }
 

@@ -40,7 +40,7 @@ PowerShellVersion = '5.0'
 # ProcessorArchitecture = ''
 
 # Modules that must be imported into the global environment prior to importing this module
-RequiredModules = @('Qlik-Cli', 'xNetworking', 'xPSDesiredStateConfiguration', 'xSmbShare')
+RequiredModules = @(@{ModuleName = 'Qlik-Cli'; ModuleVersion = '1.21.0'})
 
 # Assemblies that must be loaded prior to importing this module
 # RequiredAssemblies = @()
@@ -55,8 +55,10 @@ RequiredModules = @('Qlik-Cli', 'xNetworking', 'xPSDesiredStateConfiguration', '
 # FormatsToProcess = @()
 
 # Modules to import as nested modules of the module specified in RootModule/ModuleToProcess
-NestedModules = @('./DSCClassResources/WaitForQlikResource.psm1', './DSCClassResources/QlikOdag.psm1',
-    './DSCClassResources/QlikPackage.psm1', './DSCClassResources/QlikProxy.psm1', './Private/Common.psm1')
+NestedModules = @('DSCClassResources/WaitForQlikResource.psm1', 'DSCClassResources/QlikLicense.psm1',
+    'DSCClassResources/QlikOdag.psm1', 'DSCClassResources/QlikPackage.psm1', 'DSCClassResources/QlikProxy.psm1',
+    'Private/Common.psm1')
+# NestedModules = @()
 
 # Functions to export from this module
 FunctionsToExport = ''
@@ -73,8 +75,7 @@ AliasesToExport = ''
 # DSC resources to export from this module
 DscResourcesToExport = @('QlikApp', 'QlikConnect', 'QlikContentLibrary', 'QlikCustomProperty', 'QlikDataConnection',
     'QlikEngine', 'QlikExtension', 'QlikLicense', 'QlikNode', 'QlikOdag', 'QlikPackage', 'QlikProxy', 'QlikRule', 'QlikScheduler',
-    'QlikServiceCluster', 'QlikStream', 'QlikTask', 'QlikVirtualProxy', 'QlikUser', 'ConfigFile', 'EncryptConfig',
-    'WaitForQlikResource')
+    'QlikServiceCluster', 'QlikStream', 'QlikTask', 'QlikVirtualProxy', 'QlikUser', 'WaitForQlikResource')
 
 # List of all modules packaged with this module
 # ModuleList = @()

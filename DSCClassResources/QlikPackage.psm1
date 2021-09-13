@@ -22,18 +22,18 @@ class QlikPackage {
     [string]$Log
 
     [DscProperty()]
-    [Bool]$DesktopShortcut
+    [Nullable[bool]]$DesktopShortcut
 
     [DscProperty()]
-    [Bool]$SkipStartServices
+    [Nullable[bool]]$SkipStartServices
 
     [DscProperty()]
-    [Bool]$SkipValidation
+    [Nullable[bool]]$SkipValidation
 
     [DscProperty()]
     [string]$InstallDir
 
-    [DscProperty(Mandatory)]
+    [DscProperty()]
     [PSCredential]$ServiceCredential
 
     [DscProperty()]
@@ -50,7 +50,7 @@ class QlikPackage {
 
     [DscProperty()]
     [ValidateRange(1, 65535)]
-    [int]$DbPort
+    [Nullable[int]]$DbPort
 
     [DscProperty()]
     [string]$RootDir
@@ -68,13 +68,13 @@ class QlikPackage {
     [string]$AppsDir
 
     [DscProperty()]
-    [bool]$CreateCluster
+    [Nullable[bool]]$CreateCluster
 
     [DscProperty()]
-    [bool]$InstallLocalDb
+    [Nullable[bool]]$InstallLocalDb
 
     [DscProperty()]
-    [bool]$ConfigureDbListener
+    [Nullable[bool]]$ConfigureDbListener
 
     [DscProperty()]
     [string]$ListenAddresses
@@ -83,10 +83,13 @@ class QlikPackage {
     [string]$IpRange
 
     [DscProperty()]
-    [bool]$ConfigureLogging
+    [Nullable[int]]$MaxConnections
 
     [DscProperty()]
-    [bool]$SetupLocalLoggingDb
+    [Nullable[bool]]$ConfigureLogging
+
+    [DscProperty()]
+    [Nullable[bool]]$SetupLocalLoggingDb
 
     [DscProperty()]
     [PSCredential]$QLogsWriterPassword
@@ -99,16 +102,16 @@ class QlikPackage {
 
     [DscProperty()]
     [ValidateRange(1, 65535)]
-    [int]$QLogsPort
+    [Nullable[int]]$QLogsPort
 
     [DscProperty()]
-    [bool]$JoinCluster
+    [Nullable[bool]]$JoinCluster
 
     [DscProperty()]
-    [Int]$ExitCode=0
+    [Int]$ExitCode = 0
 
-    [DscProperty()]
-    [bool]$AcceptEula
+    [DscProperty(Mandatory)]
+    [Nullable[bool]]$AcceptEula
 
     [DscProperty()]
     [ValidateSet('Dashboard', 'Visualization')]
@@ -126,14 +129,14 @@ class QlikPackage {
     [void] Set() {
         $currentState = $this.Get()
         if($this.Ensure -eq [Ensure]::Present) {
-            Write-Debug "Setup: $($this.Setup)"
+            Write-Verbose "Setup: $($this.Setup)"
             $_productName = (Get-FileInfo $this.Setup).ProductName
             if ($currentState.ProductName -ne $_productName) {
                 $installParams = @{
                     Path = $this.Setup
                     SkipStartServices = $this.SkipStartServices
                 }
-                $this_condensed = $this | Select-Object -Property $this.psobject.properties.Name.Where{ $this.$_ }
+                $this_condensed = $this | Select-Object -Property $this.psobject.properties.Name.Where{ $null -ne $this.$_ }
                 if (! $currentState.ProductName) {
                     Write-Verbose "Installing $_productName"
                     $spc = $this_condensed | New-QlikSharedPersistenceConfiguration -Path $this.SpcFilePath
@@ -185,14 +188,15 @@ class QlikPackage {
     }
 
     [bool] Test() {
+        Write-Verbose 'Start test'
         if($env:USERNAME -eq "$env:COMPUTERNAME$") {
             Write-Error "$($this.Name) can not be installed by 'LOCAL SYSTEM', please use PsDscRunAsCredential property"
         }
         $packages = $this.Get()
         if($this.Ensure -eq [Ensure]::Present) {
             $product = (Get-FileInfo $this.Setup).ProductName
-            Write-Debug "Installed: $($packages.ProductName)"
-            Write-Debug "Desired: $product"
+            Write-Verbose "Installed: $($packages.ProductName)"
+            Write-Verbose "Desired: $product"
             if($packages.ProductName -ne $product -and $packages.PatchName -ne $product) {
                 Write-Verbose "Package $product not installed."
                 return $false
@@ -228,12 +232,12 @@ class QlikPackage {
         $products = Get-ItemProperty HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* |
             Where-Object { $_.DisplayName -match "^Qlik Sense" }
         if($products) {
-            Write-Debug "Found $($products.Count) packages"
+            Write-Verbose "Found $($products.Count) packages"
             $package.ProductName = $products | Where-Object { $_.DisplayName -notmatch 'Patch' } | Select-Object -ExpandProperty DisplayName
             $package.PatchName = $products | Where-Object { $_.DisplayName -match 'Patch' } | Select-Object -ExpandProperty DisplayName
             $package.Ensure = [Ensure]::Present
         } else {
-            Write-Debug 'No packages found'
+            Write-Verbose 'No packages found'
             $package.Ensure = [Ensure]::Absent
         }
         return $package
@@ -258,6 +262,7 @@ function Install-QlikPackage {
         [switch]$AcceptEula,
 
         [Parameter(ParameterSetName = 'Install', Mandatory = $true, ValueFromPipelineByPropertyName = $true)]
+        [Parameter(ParameterSetName = 'Upgrade', Mandatory = $true, ValueFromPipelineByPropertyName = $true)]
         [ValidateScript({$_.UserName.IndexOf('\') -gt 0})]
         [pscredential]$ServiceCredential,
 
@@ -300,9 +305,13 @@ function Install-QlikPackage {
         else {
             $products = Get-ItemProperty HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* |
                 Where-Object { $_.DisplayName -match "^Qlik Sense" }
+            Write-Debug "Found $(@($products).Count) products installed"
             $Arguments = '-silent'
+            Write-Debug "username: $($ServiceCredential.UserName)"
             $Arguments += " userpassword=`"$($ServiceCredential.GetNetworkCredential().Password)`""
+            Write-Debug 'Set userpassword'
             if (! $products) {
+                Write-Debug 'New install'
                 $Arguments += " userwithdomain=`"$($ServiceCredential.UserName)`""
                 if ($SharedPersistenceConfig) { $Arguments += " sharedpersistenceconfig=`"$SharedPersistenceConfig`"" }
                 if ($Hostname) { $Arguments += " hostname=`"$Hostname`"" }
@@ -312,15 +321,17 @@ function Install-QlikPackage {
             }
             if ($AcceptEula.IsPresent) { $Arguments += ' accepteula=1' }
             if ($DbPassword) {
+                Write-Debug 'Setting dbpassword'
                 $Arguments += (" dbpassword=`"{0}`"" -f ($DbPassword.GetNetworkCredential().Password))
             }
             if ($Log) { $Arguments += " -log `"$Log`""}
             if (!$DesktopShortcut.IsPresent) { $Arguments += ' desktopshortcut=0' }
             if ($SkipStartServices.IsPresent) { $Arguments += ' skipstartservices=1' }
             if ($InstallDir) { $Arguments += " installdir=`"$InstallDir`""}
-            if ($BundleInstall) { $Arguments += " bundleinstall={0}" -f ($BundleInstall.ToLower() -join ',')}
+            if ($BundleInstall) { Write-Debug 'Adding bundles'; $Arguments += " bundleinstall={0}" -f ($BundleInstall.ToLower() -join ',')}
             if ($CleanUp.IsPresent) { $Arguments += ' cleanup=1' }
         }
+        Write-Debug 'processed parameters'
 
         $startInfo = New-Object System.Diagnostics.ProcessStartInfo
         $startInfo.UseShellExecute = $false
@@ -407,6 +418,9 @@ function New-QlikSharedPersistenceConfiguration {
                     $value = $RootDir.TrimEnd('\') + "\$value"
                     Set-Variable $item $value
                     Write-Verbose "$item path not rooted, resolving to $value"
+                    if (! $PSBoundParameters.ContainsKey($item)) {
+                        $PSBoundParameters.Add($item, $value)
+                    }
                 }
             }
             else {
@@ -423,12 +437,13 @@ function New-QlikSharedPersistenceConfiguration {
 
         $xmlWriter.WriteElementString($PSCmdlet.ParameterSetName, 'true')
 
-        $ParameterList = $PSCmdlet.MyInvocation.MyCommand.Parameters.Keys |
-            Where-Object { $_ -ne 'Path' -and $_ -notin [System.Management.Automation.Cmdlet]::CommonParameters }
+        # $ParameterList = $PSCmdlet.MyInvocation.MyCommand.Parameters.Keys |
+        #     Where-Object { $_ -ne 'Path' -and $_ -notin [System.Management.Automation.Cmdlet]::CommonParameters }
+        $ParameterList = $PSBoundParameters.Keys | Where-Object { $_ -ne 'Path' }
 
         foreach ($parameter in $ParameterList) {
             $value = Get-Variable -Name $parameter -ValueOnly -ErrorAction SilentlyContinue
-            if (! $value) { continue }
+            if ($null -eq $value) { continue }
 
             Write-Debug "$parameter : $value"
             switch ($value.GetType()) {

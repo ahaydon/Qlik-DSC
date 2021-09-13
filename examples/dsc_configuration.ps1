@@ -1,14 +1,14 @@
-﻿$password = ConvertTo-SecureString -String 'Qlik1234' -AsPlainText -Force
-$SenseService = New-Object System.Management.Automation.PSCredential("sense-cn\qservice", $password)
+﻿$Hostname = ([System.Net.Dns]::GetHostEntry('localhost')).hostname
+$password = ConvertTo-SecureString -String 'Qlik1234' -AsPlainText -Force
+$SenseService = New-Object System.Management.Automation.PSCredential("$Hostname\qservice", $password)
 $DbCredential = New-Object System.Management.Automation.PSCredential("qliksenserepository", $password)
 $password = ConvertTo-SecureString -String 'vagrant' -AsPlainText -Force
-$QlikAdmin = New-Object System.Management.Automation.PSCredential("sense-cn\vagrant", $password)
+$QlikAdmin = New-Object System.Management.Automation.PSCredential("$Hostname\vagrant", $password)
 $CachePath = 'C:\kitchen-cache'
-$SenseRelease = 'February 2021'
-$SensePatch = 1
+$SenseRelease = 'May 2021'
+$SensePatch = 3
 $SetupPath = "$CachePath\Qlik Sense $SenseRelease\Qlik_Sense_setup.exe"
 $UpdatePath = "$CachePath\Qlik Sense $SenseRelease Patch $SensePatch\Qlik_Sense_update.exe"
-$Hostname = ([System.Net.Dns]::GetHostEntry('localhost')).hostname
 
 Configuration Default {
     Import-DscResource -ModuleName PSDesiredStateConfiguration -ModuleVersion 1.1
@@ -17,7 +17,7 @@ Configuration Default {
     Import-DscResource -ModuleName xNetworking -ModuleVersion 5.7.0.0
     Import-DscResource -ModuleName QlikResources
 
-    Node $AllNodes.NodeName {
+    Node 'localhost' {
         User QlikAdmin {
             UserName               = $QlikAdmin.GetNetworkCredential().UserName
             Password               = $QlikAdmin
@@ -51,19 +51,19 @@ Configuration Default {
 
         xRemoteFile SenseSetup {
             DestinationPath = $SetupPath
-            Uri             = 'https://da3hntz84uekx.cloudfront.net/QlikSense/14.5/0/_MSI/Qlik_Sense_setup.exe'
+            Uri             = 'https://da3hntz84uekx.cloudfront.net/QlikSense/14.20/0/_MSI/Qlik_Sense_setup.exe'
             ChecksumType    = 'SHA256'
-            Checksum        = '2362399C6152E47EED72A2F7B84E8AF4E21E760299BBE6F139A25930A615EECD'
+            Checksum        = 'c9fc20e2b73aa20557302bb137384a4040bdd6edbad2cbe8cf57f6b66f6dc054'
             MatchSource     = $false
             DependsOn       = '[File]Cache'
         }
-    
+
         if ($SensePatch -gt 0) {
             xRemoteFile SenseUpdate {
                 DestinationPath = $UpdatePath
-                Uri             = 'https://da3hntz84uekx.cloudfront.net/QlikSense/14.5/1/_MSI/Qlik_Sense_update.exe'
+                Uri             = 'https://da3hntz84uekx.cloudfront.net/QlikSense/14.20/3/_MSI/Qlik_Sense_update.exe'
                 ChecksumType    = 'SHA256'
-                Checksum        = '299C679C2750B3E360CF291CC9E3A9A3AD70D57E9F742E6CEC547E80EC65DB94'
+                Checksum        = '8e2a8322f613c320ab675eaa45168dd8a62c9b20a5dfe0ee9e0c50ad816c0630'
                 MatchSource     = $false
                 DependsOn       = '[File]Cache'
             }
@@ -134,7 +134,7 @@ Configuration Default {
         }
 
         QlikProxy Central {
-            Node                                = 'sense-cn'
+            Node                                = $Hostname
             ListenPort                          = 443
             AllowHttp                           = $true
             UnencryptedListenPort               = 8000
@@ -164,7 +164,7 @@ Configuration Default {
             Direction            = "InBound"
             LocalPort            = ("4242")
             Protocol             = "TCP"
-            DependsOn            = "[QlikPackage]Sense"
+            DependsOn            = "[QlikLicense]Sense"
         }
     
         xFirewall QPS {
@@ -178,7 +178,7 @@ Configuration Default {
             Direction            = "InBound"
             LocalPort            = ("443")
             Protocol             = "TCP"
-            DependsOn            = "[QlikPackage]Sense"
+            DependsOn            = "[QlikLicense]Sense"
         }
     }
 }

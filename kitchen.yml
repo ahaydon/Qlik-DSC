@@ -2,7 +2,6 @@
 driver:
   name: vagrant
   linked_clone: true
-  vm_hostname: sense-cn
   provision: true
   vagrantfiles:
     - kitchen/vagrant_windows_bootstrap.rb
@@ -17,18 +16,22 @@ provisioner:
   dsc_local_configuration_manager:
     reboot_if_needed: true
     configuration_mode: 'ApplyOnly'
+    debug_mode: 'None'
   configuration_data:
     AllNodes:
-      - NodeName: sense-cn
+      - NodeName: localhost
         PSDscAllowPlainTextPassword: true
         PSDscAllowDomainUser: true
   modules_from_gallery:
-    - xSmbShare
-    - xPSDesiredStateConfiguration
-    - xNetworking
+    - name: xPSDesiredStateConfiguration
+      requiredversion: 9.1.0
+    - name: xSmbShare
+      requiredversion: 2.2.0.0
+    - name: xNetworking
+      requiredversion: 5.7.0.0
     - name: Qlik-Cli
       requiredversion: 1.21.0
-    
+
 verifier:
   name: pester
   test_folder: tests/integration
