@@ -6,8 +6,12 @@ Describe "QlikPackage" {
             Mock Get-FileInfo -ParameterFilter { $Path -eq 'TestDrive:\Qlik_Sense_setup.exe'} {
                 @{OriginalFilename = 'Qlik_Sense_setup.exe'; ProductName = 'Qlik Sense November 2020'}
             }
-            Mock Get-FileInfo -ParameterFilter { $Path -eq 'TestDrive:\Qlik_Sense_update.exe'} {
+            Mock Get-FileInfo -ParameterFilter { $Path -eq "TestDrive:\Qlik_Sense_update.exe"} {
                 @{OriginalFilename = 'Qlik_Sense_update.exe'; ProductName = 'Qlik Sense November 2020 Patch 1'}
+            }
+            Mock Get-FileInfo {
+                Write-Host $Path
+                Write-Host $TestDrive
             }
         }
     }
@@ -85,8 +89,10 @@ Describe "QlikPackage" {
                 InModuleScope QlikPackage {
                     Mock -Verifiable Get-ItemProperty
                     Mock -Verifiable Test-Path { $true }
-                    Mock -Verifiable New-QlikSharedPersistenceConfiguration { [System.IO.FileInfo]'Test-Drive:\spc.cfg' }
                     Mock -Verifiable Install-QlikPackage
+                    Mock New-QlikSharedPersistenceConfiguration {
+                        $Path
+                    }
                     Mock Get-FileInfo -ParameterFilter { Write-Debug "MockPath: $Path"; $Path -eq 'TestDrive:\Qlik_Sense_setup.exe'} {
                         @{OriginalFilename = 'Qlik_Sense_setup.exe'; ProductName = 'Qlik Sense November 2020'}
                     }
@@ -169,7 +175,7 @@ Describe "QlikPackage" {
                 InModuleScope QlikPackage {
                     Mock -Verifiable Get-ItemProperty
                     Mock -Verifiable Test-Path { $true }
-                    Mock -Verifiable New-QlikSharedPersistenceConfiguration { [System.IO.FileInfo]'Test-Drive:\spc.cfg' }
+                    # Mock -Verifiable New-QlikSharedPersistenceConfiguration { "$TestDrive\spc.cfg" }
                     Mock -Verifiable Install-QlikPackage
                     Mock Get-FileInfo -ParameterFilter { Write-Debug "MockPath: $Path"; $Path -eq 'TestDrive:\Qlik_Sense_setup.exe'} {
                         @{OriginalFilename = 'Qlik_Sense_setup.exe'; ProductName = 'Qlik Sense November 2020'}

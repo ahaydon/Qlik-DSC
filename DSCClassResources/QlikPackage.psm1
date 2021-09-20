@@ -1,6 +1,6 @@
 enum Ensure {
-  Absent
-  Present
+    Absent
+    Present
 }
 
 [DscResource()]
@@ -140,6 +140,7 @@ class QlikPackage {
                 if (! $currentState.ProductName) {
                     Write-Verbose "Installing $_productName"
                     $spc = $this_condensed | New-QlikSharedPersistenceConfiguration -Path $this.SpcFilePath
+                    Write-Verbose "Using shared persistance config at $($spc.FullName)"
                     $installParams.SharedPersistenceConfig = $spc.FullName
                 }
                 else {
@@ -168,7 +169,7 @@ class QlikPackage {
             }
 
             if (! $this.SkipStartServices) {
-              Start-Service Qlik* -ErrorAction SilentlyContinue
+                Start-Service Qlik* -ErrorAction SilentlyContinue
             }
         } else {
             Write-Verbose "Uninstall $($this.Name)"
@@ -469,7 +470,7 @@ function New-QlikSharedPersistenceConfiguration {
         $xmlWriter.Flush()
         $xmlWriter.Close()
 
-        return Get-Item $Path
+        return $Path
     }
 }
 

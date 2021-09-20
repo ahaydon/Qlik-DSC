@@ -1,37 +1,85 @@
-version: 2
-jobs:
-  build:
+version: 2.1
+executors:
+  powershell:
     docker:
-      - image: mcr.microsoft.com/powershell:lts-ubuntu-18.04
+      - image: mcr.microsoft.com/dotnet/sdk:5.0.400-alpine3.13
+    shell: /usr/bin/pwsh
+
+jobs:
+  cache-modules:
+    executor: powershell
     steps:
-      - run:
-          name: Install Git
-          command: apt-get update && apt-get install -y git
       - checkout
+      - restore_cache:
+          keys:
+            - psm-cache-v1-{{ checksum "QlikResources.psd1" }}
       - run:
-          name: Install Psake
-          shell: /usr/bin/pwsh
+          name: Install CI dependencies
           command: |
             $ProgressPreference = 'SilentlyContinue'
-            Install-Module -Name Psake -Force
+            if (!(Get-Module -Name Psake -ListAvailable)) {
+              Write-Information "Installing Psake" -InformationAction Continue
+              Install-Module -Name Psake -Force
+            }
+            if (!(Get-Module -Name Pester -ListAvailable)) {
+              Write-Information "Installing Pester" -InformationAction Continue
+              Install-Module -Name Pester -MaximumVersion '4.99.999' -Force
+            }
       - run:
           name: Install module dependencies
-          shell: /usr/bin/pwsh
           command: |
             $ProgressPreference = 'SilentlyContinue'
             (Import-LocalizedData -BaseDirectory (Get-Location).Path -FileName QlikResources.psd1).RequiredModules.ForEach({
-              Write-Information "Installing $($_.ModuleName) v$($_.ModuleVersion)" -InformationAction Continue
-              Install-Module -Name $_.ModuleName -RequiredVersion $_.ModuleVersion -Force
+              if (!(Get-Module -FullyQualifiedName $_ -ListAvailable)) {
+                Write-Information "Installing $($_.ModuleName) v$($_.ModuleVersion)" -InformationAction Continue
+                Install-Module -Name $_.ModuleName -RequiredVersion $_.ModuleVersion -Force
+              }
             })
+      - save_cache:
+          key: psm-cache-v1-{{ checksum "QlikResources.psd1" }}
+          paths:
+            - /root/.local/share/powershell/Modules
+
+  test-unit:
+    executor: powershell
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - psm-cache-v1-{{ checksum "QlikResources.psd1" }}
+      - run:
+          name: Run Pester unit tests
+          command: |
+            New-Item `
+              -ItemType Directory `
+              -Path /output/test-results/pester | Out-Null
+
+            Invoke-Pester `
+              -Script ./tests/unit/ `
+              -EnableExit `
+              -OutputFormat JUnitXml `
+              -OutputFile /output/test-results/pester/results.xml
+      - store_test_results:
+          path: /output/test-results
+      - store_artifacts:
+          path: /output/test-results
+          destination: test-results
+
+  build:
+    executor: powershell
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - psm-cache-v1-{{ checksum "QlikResources.psd1" }}
       - run:
           name: Build
-          shell: /usr/bin/pwsh
           command: |
             $ProgressPreference = 'SilentlyContinue'
+            $ErrorActionPreference = 'Stop'
             Invoke-psake -taskList Package -parameters @{version="$($env:CIRCLE_TAG.Substring(1))"}
       - run:
           name: Check version is later than any published version
-          shell: /usr/bin/pwsh
           command: |
             $ProgressPreference = 'SilentlyContinue'
             if ((Test-ModuleManifest -Path ./modules/QlikResources/QlikResources.psd1).Version -le (Find-Module -Name QlikResources).Version) {
@@ -48,15 +96,17 @@ jobs:
 
   publish-powershell-gallery:
     working_directory: /workspace/modules/QlikResources
-    docker:
-      - image: mcr.microsoft.com/dotnet/sdk:3.1
+    executor: powershell
     steps:
       - attach_workspace:
           at: /workspace
+      - restore_cache:
+          keys:
+            - psm-cache-v1-{{ checksum "QlikResources.psd1" }}
       - run:
           name: Publish module to PowerShell Gallery
           shell: /usr/bin/pwsh
-          command: Publish-Module -Path ./ -NuGetApiKey $env:PSG_API_KEY -Verbose
+          command: Publish-Module -Path ./ -NuGetApiKey $env:PSG_API_KEY -Verbose -ErrorAction Stop
 
   publish-github-release:
     working_directory: /workspace/QlikResources
@@ -80,7 +130,13 @@ workflows:
   version: 2
   build-and-deploy:
     jobs:
+      - cache-modules
+      - test-unit:
+          requires:
+            - cache-modules
       - build:
+          requires:
+            - cache-modules
           filters:
             branches:
               ignore: /.*/

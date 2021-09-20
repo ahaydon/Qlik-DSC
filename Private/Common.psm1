@@ -1,6 +1,12 @@
 function CompareProperties( $expected, $actual, $prop ) {
     Write-Verbose "Comparing $($prop.Count) properties"
+
     foreach ($_ in $prop) {
+        if (! $expected.$_) {
+            Write-Debug "Skipping $_ as desired state is not set"
+            Continue
+        }
+
         Write-Debug "$_`: expected=$($expected.$_), actual=$($actual.$_)"
         if ('Tags' -eq $_) {
             foreach ($tag in $expected.Tags) {
