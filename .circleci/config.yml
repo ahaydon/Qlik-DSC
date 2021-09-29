@@ -130,10 +130,16 @@ workflows:
   version: 2
   build-and-deploy:
     jobs:
-      - cache-modules
+      - cache-modules:
+          filters:
+            tags:
+              only: /^v\d+\.\d+\.\d+$/
       - test-unit:
           requires:
             - cache-modules
+          filters:
+            tags:
+              only: /^v\d+\.\d+\.\d+$/
       - build:
           requires:
             - cache-modules
