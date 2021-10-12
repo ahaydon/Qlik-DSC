@@ -5,14 +5,47 @@ executors:
       - image: mcr.microsoft.com/dotnet/sdk:5.0.400-alpine3.13
     shell: /usr/bin/pwsh
 
+commands:
+  create_package_cache_file:
+    description: "Create a file of package dependencies to use for generating a cache key."
+    parameters:
+      filename:
+        type: string
+    steps:
+      - run:
+          name: Write module dependencies to requirements.txt file
+          command: |
+            $modules = Import-LocalizedData -FileName << parameters.filename >>
+            $canonicalList = $modules.RequiredModules.ForEach{
+              if ($_.RequiredVersion) {
+                '{0}={1}' -f $_.ModuleName, $_.RequiredVersion
+              }
+              elseif ($_.ModuleVersion) {
+                '{0}>={1}' -f $_.ModuleName, $_.ModuleVersion
+              }
+              elseif ($_.ModuleName) {
+                $_.ModuleName
+              }
+              else {
+                $_
+              }
+            }
+            $canonicalList | Out-File requirements.txt -Append
+
 jobs:
   cache-modules:
     executor: powershell
     steps:
       - checkout
+      - create_package_cache_file:
+          filename: QlikResources.psd1
+      - persist_to_workspace:
+          root: .
+          paths:
+            - requirements.txt
       - restore_cache:
           keys:
-            - psm-cache-v1-{{ checksum "QlikResources.psd1" }}
+            - psm-cache-v1-{{ checksum "requirements.txt" }}
       - run:
           name: Install CI dependencies
           command: |
@@ -36,7 +69,7 @@ jobs:
               }
             })
       - save_cache:
-          key: psm-cache-v1-{{ checksum "QlikResources.psd1" }}
+          key: psm-cache-v1-{{ checksum "requirements.txt" }}
           paths:
             - /root/.local/share/powershell/Modules
 
@@ -44,9 +77,11 @@ jobs:
     executor: powershell
     steps:
       - checkout
+      - create_package_cache_file:
+          filename: QlikResources.psd1
       - restore_cache:
           keys:
-            - psm-cache-v1-{{ checksum "QlikResources.psd1" }}
+            - psm-cache-v1-{{ checksum "requirements.txt" }}
       - run:
           name: Run Pester unit tests
           command: |
@@ -69,9 +104,11 @@ jobs:
     executor: powershell
     steps:
       - checkout
+      - create_package_cache_file:
+          filename: QlikResources.psd1
       - restore_cache:
           keys:
-            - psm-cache-v1-{{ checksum "QlikResources.psd1" }}
+            - psm-cache-v1-{{ checksum "requirements.txt" }}
       - run:
           name: Build
           command: |
@@ -102,7 +139,7 @@ jobs:
           at: /workspace
       - restore_cache:
           keys:
-            - psm-cache-v1-{{ checksum "QlikResources.psd1" }}
+            - psm-cache-v1-{{ checksum "/workspace/requirements.txt" }}
       - run:
           name: Publish module to PowerShell Gallery
           shell: /usr/bin/pwsh
@@ -151,6 +188,7 @@ workflows:
       - publish-powershell-gallery:
           context: powershell-gallery
           requires:
+            - test-unit
             - build
           filters:
             branches:
@@ -160,6 +198,7 @@ workflows:
       - publish-github-release:
           context: github
           requires:
+            - test-unit
             - build
           filters:
             branches:
