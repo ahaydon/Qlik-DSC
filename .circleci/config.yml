@@ -13,7 +13,7 @@ commands:
         type: string
     steps:
       - run:
-          name: Combine package-lock.json files to single file
+          name: Write module dependencies to requirements.txt file
           command: |
             $modules = Import-LocalizedData -FileName << parameters.filename >>
             $canonicalList = $modules.RequiredModules.ForEach{
