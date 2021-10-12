@@ -107,6 +107,7 @@ Describe "QlikPackage" {
                 $credential = New-Object System.Management.Automation.PSCredential('.\qservice', $password)
                 $pkg = [QlikPackage]@{
                     Setup               = 'TestDrive:\Qlik_Sense_setup.exe'
+                    SpcFilePath         = (Join-Path (Get-PSDrive TestDrive).Root 'spc.cfg')
                     ServiceCredential   = $credential
                     DbSuperUserPassword = $credential
                     DbCredential        = $credential
@@ -156,6 +157,7 @@ Describe "QlikPackage" {
                 $credential = New-Object System.Management.Automation.PSCredential('.\qservice', $password)
                 $pkg = [QlikPackage]@{
                     Setup               = 'TestDrive:\Qlik_Sense_setup.exe'
+                    SpcFilePath         = (Join-Path (Get-PSDrive TestDrive).Root 'spc.cfg')
                     ServiceCredential   = $credential
                     DbSuperUserPassword = $credential
                     SkipStartServices   = $true
@@ -191,6 +193,7 @@ Describe "QlikPackage" {
                 $credential = New-Object System.Management.Automation.PSCredential('.\qservice', $password)
                 $pkg = [QlikPackage]@{
                     Setup               = 'TestDrive:\Qlik_Sense_setup.exe'
+                    SpcFilePath         = (Join-Path (Get-PSDrive TestDrive).Root 'spc.cfg')
                     ServiceCredential   = $credential
                     DbCredential        = $credential
                     SkipStartServices   = $true

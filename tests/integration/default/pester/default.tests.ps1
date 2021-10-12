@@ -18,8 +18,8 @@ Describe 'Administrator group members' {
     it 'Should include the Qlik admin user' {
         (Get-LocalGroupMember -Name Administrators).Name | Should -Contain "$Hostname\vagrant"
     }
-    it 'Should include the Qlik service user' {
-        (Get-LocalGroupMember -Name Administrators).Name | Should -Contain "$Hostname\qservice"
+    it 'Should not include the Qlik service user' {
+        (Get-LocalGroupMember -Name Administrators).Name | Should -Not -Contain "$Hostname\qservice"
     }
 }
 

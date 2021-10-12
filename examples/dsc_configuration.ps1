@@ -17,7 +17,16 @@ Configuration Default {
     Import-DscResource -ModuleName xNetworking -ModuleVersion 5.7.0.0
     Import-DscResource -ModuleName QlikResources
 
-    Node 'localhost' {
+    $CentralNode = $AllNodes.Where{ $_.IsCentral }.NodeName
+
+    Node $AllNodes.Where{ $_.NodeName -eq $Hostname }.NodeName {
+        foreach ($Name in @('Domain', 'Private', 'Public')) {
+            xFirewallProfile $Name {
+                Name = $Name
+                Enabled = 'False'
+            }
+        }
+
         User QlikAdmin {
             UserName               = $QlikAdmin.GetNetworkCredential().UserName
             Password               = $QlikAdmin
@@ -39,8 +48,8 @@ Configuration Default {
 
         Group Administrators {
             GroupName        = 'Administrators'
-            MembersToInclude = $QlikAdmin.GetNetworkCredential().UserName, $SenseService.GetNetworkCredential().UserName
-            DependsOn        = "[User]QlikAdmin", "[User]SenseService"
+            MembersToInclude = $QlikAdmin.GetNetworkCredential().UserName
+            DependsOn        = "[User]QlikAdmin"
         }
 
         File Cache {
@@ -69,116 +78,140 @@ Configuration Default {
             }
         }
 
-        File QlikClusterRoot {
-            Type            = 'Directory'
-            DestinationPath = 'C:\QlikShare'
-            Ensure          = 'Present'
+        if ($Node.IsCentral) {
+            File QlikClusterRoot {
+                Type            = 'Directory'
+                DestinationPath = 'C:\QlikShare'
+                Ensure          = 'Present'
+            }
+
+            xSmbShare QlikClusterShare {
+                Path       = 'C:\QlikShare'
+                Name       = 'QlikShare'
+                FullAccess = $SenseService.UserName
+                Ensure     = 'Present'
+                DependsOn  = '[File]QlikClusterRoot'
+            }
+
+            QlikPackage Sense {
+                Name                 = "Qlik Sense $SenseRelease"
+                Setup                = $SetupPath
+                Patch                = $UpdatePath
+                ServiceCredential    = $SenseService
+                RootDir              = "\\$Hostname\QlikShare"
+                DbSuperUserPassword  = $DbCredential
+                DbCredential         = $DbCredential
+                CreateCluster        = $true
+                InstallLocalDb       = $true
+                ConfigureDbListener  = $true
+                ListenAddresses      = '*'
+                IpRange              = '0.0.0.0/0,::0/0'
+                MaxConnections       = 400
+                Hostname             = $Hostname
+                ConfigureLogging     = $false
+                QLogsWriterPassword  = $DbCredential
+                QLogsReaderPassword  = $DbCredential
+                AcceptEula           = $true
+                Ensure               = 'Present'
+                PSDscRunasCredential = $QlikAdmin
+                DependsOn            = '[xSmbShare]QlikClusterShare', '[Group]Administrators', '[xRemoteFile]SenseSetup'
+            }
+        }
+        else {
+            QlikPackage Sense {
+                Setup                = $SetupPath
+                Patch                = $UpdatePath
+                AcceptEula           = $true
+                ServiceCredential    = $SenseService
+                SkipValidation       = $true
+                DbHost               = $CentralNode
+                DbPort               = 4432
+                DbCredential         = $DbCredential
+                ConfigureLogging     = $false
+                SkipStartServices    = $true
+                Ensure               = 'Present'
+                PsDscRunasCredential = $QlikAdmin
+                DependsOn            = '[Group]Administrators', '[xRemoteFile]SenseSetup'
+            }
+
+            QlikConnect Central {
+                Computername         = $CentralNode
+                Username             = "$CentralNode\$($QlikAdmin.GetNetworkCredential().UserName)"
+                TrustAllCerts        = $true
+                PSDscRunasCredential = $QlikAdmin
+                DependsOn            = '[QlikPackage]Sense'
+            }
+
+            QlikNode Rim {
+                Name                 = $Hostname
+                Hostname             = $Hostname
+                Proxy                = $true
+                Engine               = $true
+                Printing             = $true
+                Scheduler            = $true
+                Ensure               = 'Present'
+                PsDscRunasCredential = $QlikAdmin
+                DependsOn            = '[QlikConnect]Central'
+            }
         }
 
-        xSmbShare QlikClusterShare {
-            Path       = 'C:\QlikShare'
-            Name       = 'QlikShare'
-            FullAccess = $SenseService.UserName
-            Ensure     = 'Present'
-            DependsOn  = '[File]QlikClusterRoot'
+        $serviceDependency = @('[QlikPackage]Sense')
+        if (-not $Node.IsCentral) {
+            $serviceDependency += '[QlikNode]Rim'
         }
-
-        QlikPackage Sense {
-            Name                 = "Qlik Sense $SenseRelease"
-            Setup                = $SetupPath
-            Patch                = $UpdatePath
-            ServiceCredential    = $SenseService
-            RootDir              = "\\$Hostname\QlikShare"
-            DbSuperUserPassword  = $DbCredential
-            DbCredential         = $DbCredential
-            CreateCluster        = $true
-            InstallLocalDb       = $true
-            ConfigureDbListener  = $true
-            Hostname             = $Hostname
-            ConfigureLogging     = $false
-            QLogsWriterPassword  = $DbCredential
-            QLogsReaderPassword  = $DbCredential
-            AcceptEula           = $true
-            Ensure               = 'Present'
-            PSDscRunasCredential = $QlikAdmin
-            DependsOn            = '[xSmbShare]QlikClusterShare', '[Group]Administrators', '[xRemoteFile]SenseSetup'
-        }
-
-        $services = @("QlikSenseRepositoryDatabase", "QlikSenseRepositoryService", "QlikSenseServiceDispatcher",
+        $services = @("QlikLoggingService", "QlikSenseRepositoryService", "QlikSenseServiceDispatcher",
             "QlikSensePrintingService", "QlikSenseSchedulerService", "QlikSenseEngineService", "QlikSenseProxyService")
         foreach ($svc in $services) {
             xService $svc {
                 Name      = $svc
-                State     = "Running"
-                DependsOn = "[QlikPackage]Sense"
+                State     = 'Running'
+                DependsOn = $serviceDependency
             }
         }
 
-        QlikConnect Central {
-            Computername         = $Hostname
-            Username             = $QlikAdmin.UserName
-            PSDscRunasCredential = $QlikAdmin
-            DependsOn            = '[xService]QlikSenseProxyService'
-        }
-
-        $License = $ConfigurationData.Sense.License
-        QlikLicense Sense {
-            Serial               = $License.Serial
-            Control              = $License.Control
-            Name                 = $License.Name
-            Organization         = $License.Organization
-            Lef                  = $License.Lef
-            Ensure               = "Present"
-            PSDscRunasCredential = $QlikAdmin
-            DependsOn            = "[QlikConnect]Central"
-        }
-
-        QlikProxy Central {
-            Node                                = $Hostname
-            ListenPort                          = 443
-            AllowHttp                           = $true
-            UnencryptedListenPort               = 8000
-            AuthenticationListenPort            = 4245
-            KerberosAuthentication              = $true
-            UnencryptedAuthenticationListenPort = 4246
-            SslBrowserCertificateThumbprint     = 'foobar'
-            KeepAliveTimeoutSeconds             = 20
-            MaxHeaderSizeBytes                  = 65534
-            MaxHeaderLines                      = 200
-            RestListenPort                      = 4234
-            CustomProperties                    = @{
-                Foo = 'Foobar'
+        if ($Node.IsCentral) {
+            QlikConnect Central {
+                Computername         = $CentralNode
+                Username             = $QlikAdmin.UserName
+                PSDscRunasCredential = $QlikAdmin
+                DependsOn            = '[xService]QlikSenseProxyService'
             }
-            PSDscRunasCredential                = $QlikAdmin
-            DependsOn                           = '[QlikLicense]Sense'
+
+            $License = $ConfigurationData.Sense.License
+            QlikLicense Sense {
+                Serial               = $License.Serial
+                Control              = $License.Control
+                Name                 = $License.Name
+                Organization         = $License.Organization
+                Lef                  = $License.Lef
+                Ensure               = "Present"
+                PSDscRunasCredential = $QlikAdmin
+                DependsOn            = "[QlikConnect]Central"
+            }
+        }
+        else {
+            QlikProxy Central {
+                Node                                = $Hostname
+                SslBrowserCertificateThumbprint     = 'foobar'
+                KeepAliveTimeoutSeconds             = 20
+                MaxHeaderSizeBytes                  = 65534
+                MaxHeaderLines                      = 200
+                CustomProperties                    = @{
+                    Foo = 'Foobar'
+                }
+                PSDscRunasCredential                = $QlikAdmin
+                DependsOn                           = '[xService]QlikSenseProxyService'
+            }
         }
 
-        xFirewall QRS {
-            Name                 = "QRS"
-            DisplayName          = "Qlik Sense Repository Service"
-            Group                = "Qlik Sense"
-            Ensure               = "Present"
-            Action               = "Allow"
-            Enabled              = "True"
-            Profile              = ("Domain", "Private", "Public")
-            Direction            = "InBound"
-            LocalPort            = ("4242")
-            Protocol             = "TCP"
-            DependsOn            = "[QlikLicense]Sense"
-        }
-    
-        xFirewall QPS {
-            Name                 = "QPS"
-            DisplayName          = "Qlik Sense Proxy HTTPS"
-            Group                = "Qlik Sense"
-            Ensure               = "Present"
-            Action               = "Allow"
-            Enabled              = "True"
-            Profile              = ("Domain", "Private", "Public")
-            Direction            = "InBound"
-            LocalPort            = ("443")
-            Protocol             = "TCP"
-            DependsOn            = "[QlikLicense]Sense"
+        QlikUser Vagrant {
+            UserId               = 'vagrant'
+            UserDirectory        = $Node.NodeName
+            Name                 = 'Vagrant User'
+            Roles                = 'RootAdmin'
+            Ensure               = 'Present'
+            PSDscRunasCredential = $QlikAdmin
+            DependsOn            = '[QlikConnect]Central'
         }
     }
 }

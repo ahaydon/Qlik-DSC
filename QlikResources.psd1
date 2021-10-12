@@ -4,7 +4,7 @@
 RootModule = 'QlikResources.psm1'
 
 # Version number of this module.
-ModuleVersion = '1.10.0'
+ModuleVersion = '0.0.0'
 
 # ID used to uniquely identify this module
 GUID = '81624038-5e71-40f8-8905-b1a87afe22d7'
@@ -56,8 +56,8 @@ RequiredModules = @(@{ModuleName = 'Qlik-Cli'; ModuleVersion = '1.21.0'})
 
 # Modules to import as nested modules of the module specified in RootModule/ModuleToProcess
 NestedModules = @('DSCClassResources/WaitForQlikResource.psm1', 'DSCClassResources/QlikLicense.psm1',
-    'DSCClassResources/QlikOdag.psm1', 'DSCClassResources/QlikPackage.psm1', 'DSCClassResources/QlikProxy.psm1',
-    'Private/Common.psm1')
+    'DSCClassResources/QlikOdag.psm1', 'DSCClassResources/QlikNode.psm1', 'DSCClassResources/QlikPackage.psm1',
+    'DSCClassResources/QlikProxy.psm1', 'Private/Bootstrap.psm1', 'Private/Common.psm1')
 # NestedModules = @()
 
 # Functions to export from this module

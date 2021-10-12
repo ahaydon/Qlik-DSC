@@ -17,9 +17,14 @@ provisioner:
     reboot_if_needed: true
     configuration_mode: 'ApplyOnly'
     debug_mode: 'None'
+  configuration_name: default
   configuration_data:
     AllNodes:
-      - NodeName: localhost
+      - NodeName: central
+        IsCentral: true
+        PSDscAllowPlainTextPassword: true
+        PSDscAllowDomainUser: true
+      - NodeName: rim1
         PSDscAllowPlainTextPassword: true
         PSDscAllowDomainUser: true
   modules_from_gallery:
@@ -52,10 +57,6 @@ platforms:
       name: winrm
     driver:
       box: qlik/win2k19
-    driver_config:
-      network:
-        - ["forwarded_port", {guest: 443, host: 8443, auto_correct: true}]
-        - ["forwarded_port", {guest: 4242, host: 4242, auto_correct: true}]
   - name: windows-2016
     os_type: windows
     shell: powershell
@@ -63,10 +64,17 @@ platforms:
       name: winrm
     driver:
       box: qlik/win2k16
-    driver_config:
-      network:
-        - ["forwarded_port", {guest: 443, host: 8443, auto_correct: true}]
-        - ["forwarded_port", {guest: 4242, host: 4242, auto_correct: true}]
 
 suites:
   - name: default
+    driver:
+      vm_hostname: central
+      network:
+        - ["private_network", {ip: "192.168.33.2"}]
+        - ["forwarded_port", {guest: 443, host: 8443, auto_correct: true}]
+        - ["forwarded_port", {guest: 4242, host: 4242, auto_correct: true}]
+  - name: rim
+    driver:
+      vm_hostname: rim1
+      network:
+        - ["private_network", {ip: "192.168.33.3"}]

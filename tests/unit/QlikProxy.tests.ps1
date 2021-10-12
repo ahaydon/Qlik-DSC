@@ -1,6 +1,5 @@
-$ProjectRoot = Split-Path $PSScriptRoot -Parent | Split-Path -Parent
-$modulePath = Join-Path $ProjectRoot -ChildPath 'DSCClassResources' | Join-Path -ChildPath 'QlikProxy.psm1'
-Import-Module -PassThru $modulePath
+using module ../../Private/Common.psm1
+using module ../../DSCClassResources/QlikProxy.psm1
 
 InModuleScope QlikProxy {
     Describe "QlikProxy" {
@@ -50,13 +49,15 @@ InModuleScope QlikProxy {
 
         Context 'Set' {
             BeforeAll {
-                Mock Update-QlikProxy -Verifiable
-                Mock Get-QlikProxy -Verifiable {
-                    return @{
-                        id = [guid]::NewGuid()
-                        settings = [QlikProxy]@{
-                            AllowHTTP = $true
-                            KerberosAuthentication = $true
+                InModuleScope QlikProxy {
+                    Mock Update-QlikProxy -Verifiable
+                    Mock Get-QlikProxy -Verifiable {
+                        return @{
+                            id = [guid]::NewGuid()
+                            settings = [QlikProxy]@{
+                                AllowHTTP = $true
+                                KerberosAuthentication = $true
+                            }
                         }
                     }
                 }
@@ -87,15 +88,17 @@ InModuleScope QlikProxy {
 
             Describe 'When setting custom properties' {
                 BeforeAll {
-                    Mock Get-QlikCustomProperty -ModuleName Common -Verifiable {
-                        return @{ choiceValues = @('A') }
+                    InModuleScope Common {
+                        Mock Get-QlikCustomProperty {
+                            return @{ choiceValues = @('A') }
+                        }
                     }
                     $proxy = [QlikProxy]@{ Node = 'localhost'; CustomProperties = @{ Group = 'A' } }
                     $proxy.Set()
                 }
 
                 It 'Should call Update-QlikProxy with the custom properties' {
-                    Assert-MockCalled -CommandName Update-QlikProxy -ParameterFilter { $CustomProperties -contains 'Group=A' }
+                    Assert-MockCalled -ModuleName QlikProxy -CommandName Update-QlikProxy -ParameterFilter { $CustomProperties -contains 'Group=A' }
                     Assert-VerifiableMock
                 }
             }
