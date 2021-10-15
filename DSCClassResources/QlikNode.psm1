@@ -65,7 +65,7 @@ class QlikNode{
                 proxyEnabled = $this.Proxy
                 schedulerEnabled = $this.Scheduler
                 printingEnabled = $this.Printing
-                Failover = $this.Failover
+                failoverCandidate = $this.Failover
             }
             if ($this.Name) { $params.Add("Name", $this.Name) }
             if ($this.NodePurpose) { $params.Add("NodePurpose", $this.NodePurpose) }
@@ -224,8 +224,8 @@ class QlikNode{
             return $false
         }
 
-        if ($null -ne $this.Failover -and $item.failover -ne $this.Failover) {
-            Write-Verbose "Test-HasProperties: Failover property value - $($item.Failover) does not match desired state - $($this.Failover)"
+        if ($null -ne $this.Failover -and $item.failoverCandidate -ne $this.Failover) {
+            Write-Verbose "Test-HasProperties: Failover property value - $($item.failoverCandidate) does not match desired state - $($this.Failover)"
             return $false
         }
 

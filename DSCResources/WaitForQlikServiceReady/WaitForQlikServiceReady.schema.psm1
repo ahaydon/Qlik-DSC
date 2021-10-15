@@ -5,8 +5,6 @@ Configuration WaitForQlikServiceReady {
         [int] $RetryDelay = 15
     )
 
-    Import-DscResource -ModuleName PSDesiredStateConfiguration
-
     WaitForQlikResource $Hostname {
         Name         = "ServiceReady-$Hostname"
         ResourceType = 'ServiceStatus'
